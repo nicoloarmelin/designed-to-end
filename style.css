@@ -232,3 +232,14 @@ legend, .select-label { font: 12px var(--mono); text-transform: uppercase; lette
   .detail-visual { height: 100%; min-height: 0; }
 }
 @media(prefers-reduced-motion:reduce) { *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
+
+/* Research fields and sources from the complete format catalogue. */
+#detail-meta > div { min-width: 0; }
+#detail-meta dd { overflow-wrap: anywhere; }
+#detail-context { white-space: pre-line; }
+#detail-references { padding-left: 20px; margin: 20px 0 0; }
+#detail-references li { margin: 12px 0; }
+#detail-references a { color: var(--ink); font-size: 16px; line-height: 1.5; text-underline-offset: 4px; overflow-wrap: anywhere; }
+#detail-subtitle { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+@media(max-width:640px) { .footer-caption { flex: 1; min-width: 0; } #result-count { white-space: normal; line-height: 1.4; } }

@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Designed to End. Un archivio di identità visive per eventi: marchi, manifesti e applicazioni da esplorare.">
   <title>Designed to End — Archivio di identità visive</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=100">
 </head>
 <body>
   <header class="toolbar">
-    <button class="brand" id="about" aria-label="Designed to End — introduzione"><span class="brand-dot" aria-hidden="true"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6 5.6 18.4"/></svg></span>Designed to End<span class="brand-label">Archivio visivo / 001—024</span></button>
+    <button class="brand" id="about" aria-label="Designed to End — introduzione"><span class="brand-dot" aria-hidden="true"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6 5.6 18.4"/></svg></span>Designed to End<span class="brand-label">Archivio visivo / 100 formati</span></button>
     <div class="tools">
       <div class="search-wrap"><span aria-hidden="true" class="search-symbol"></span><input id="search" type="search" placeholder="Cerca un evento…" aria-label="Cerca nell’archivio" autocomplete="off"><button id="clear-search" aria-label="Cancella ricerca" hidden><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>
       <button id="open-filters" aria-haspopup="dialog" aria-controls="filters">Filtri <span id="filter-badge" hidden>0</span></button>
@@ -53,10 +53,10 @@
     <div class="detail-heading"><p id="detail-category" class="eyebrow"></p><h1 id="detail-title"></h1><p id="detail-subtitle"></p></div>
     <div class="detail-layout">
       <div id="detail-image-pane" class="detail-visual"><div id="detail-stage" tabindex="0" aria-label="Immagine della scheda. Premi Invio per ingrandire."><img id="detail-image" src="assets/dekmantel-affissione.jpg" alt="" draggable="false"></div><div class="image-tools"><span id="detail-document-label"></span><button id="detail-zoom" aria-pressed="false">Ingrandisci ↗</button></div><div id="detail-gallery" aria-label="Immagini correlate"></div><div class="detail-abstract"><p id="detail-teaser"></p><button id="read-more">Leggi la spiegazione ↗</button></div></div>
-      <article id="detail-reading-pane" class="detail-copy" hidden><dl id="detail-meta"></dl><section><h2><span>01 /</span> Cosa osservare</h2><p id="detail-note"></p></section><section id="detail-context-block"><h2><span>02 /</span> Dal segno al sistema</h2><p id="detail-context"></p></section><p id="detail-credit"></p><a id="detail-source" target="_blank" rel="noopener noreferrer">Consulta la fonte <span aria-hidden="true">↗</span></a></article>
+      <article id="detail-reading-pane" class="detail-copy" hidden><dl id="detail-meta"></dl><section><h2><span>01 /</span> Cosa osservare</h2><p id="detail-note"></p></section><section id="detail-context-block"><h2><span>02 /</span> Dal segno al sistema</h2><p id="detail-context"></p></section><section id="detail-research"><h2>Fonti e limiti della ricerca</h2><p id="detail-limits"></p><ul id="detail-references"></ul></section><p id="detail-credit"></p><a id="detail-source" target="_blank" rel="noopener noreferrer">Consulta la fonte <span aria-hidden="true">↗</span></a></article>
     </div>
     <nav class="detail-navigation" aria-label="Navigazione delle schede"><button id="previous" aria-label="Scheda precedente"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5m5-5-5 5 5 5"/></svg></button><div class="detail-tabs" aria-label="Contenuto della scheda"><button id="tab-image" aria-pressed="true">Immagine</button><button id="tab-reading" aria-pressed="false">Spiegazione</button></div><button id="next" aria-label="Scheda successiva"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5"/></svg></button></nav>
   </dialog>
-  <script type="module" src="app.js"></script>
+  <script type="module" src="app.js?v=100"></script>
 </body>
 </html>

@@ -1,6 +1,6 @@
-import { items } from './items.js';
-import { InfiniteGrid } from './infinite-grid.js';
-import { filterItems } from './catalogue.js';
+import { items } from './items.js?v=100';
+import { InfiniteGrid } from './infinite-grid.js?v=100';
+import { filterItems } from './catalogue.js?v=100';
 
 const $ = selector => document.querySelector(selector);
 const map = $('#map');
@@ -14,6 +14,39 @@ let currentIndex = 0;
 let searchTimer;
 let detailTrigger;
 const grid = new InfiniteGrid(map, $('#tiles'), items, openDetail);
+
+function renderFormat(item) {
+  const format = item.format;
+  $('#detail-meta').replaceChildren();
+  const fields = [['Documento', item.kind], ['Edizione dell’immagine', item.year || 'Anno non specifico'],
+    ['Formato', format.name], ['Stato della ricerca', format.status],
+    ['Titolare', format.owner], ['Produttore dell’edizione', format.producer],
+    ['Fondazione / prima edizione', format.firstEdition], ['Ricorrenza', format.recurrence],
+    ['Periodo censito', format.period], ['Sede', format.location],
+    ['Variabilità', format.variability], ['Edizioni confrontate', format.comparedEditions]];
+  for (const [label, value] of fields) {
+    const group = document.createElement('div');
+    const dt = document.createElement('dt');
+    const dd = document.createElement('dd');
+    dt.textContent = label;
+    dd.textContent = value || 'Non documentato';
+    group.append(dt, dd);
+    $('#detail-meta').append(group);
+  }
+  $('#detail-context').textContent = `${item.note.startsWith(format.summary) ? '' : format.summary + '\n\n'}Segni permanenti: ${format.permanentSigns}.\n\nPeriodo e fase della variabilità: ${format.variabilityPeriod || 'Non documentati'}.`;
+  $('#detail-limits').textContent = format.limitations || 'Nessuna lacuna specificata nel foglio di ricerca.';
+  $('#detail-references').replaceChildren();
+  for (const source of format.sources) {
+    const li = document.createElement('li');
+    const link = document.createElement('a');
+    link.textContent = source.title;
+    link.href = source.url;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    li.append(link);
+    $('#detail-references').append(li);
+  }
+}
 
 function openDetail(item, trigger) {
   if (searchTimer) applyFilters();
@@ -34,22 +67,6 @@ function renderDetail() {
   $('#detail-title').textContent = item.title;
   $('#detail-category').textContent = item.category;
   $('#detail-subtitle').textContent = item.fullTitle === item.title ? 'Documento visivo dell’archivio' : item.fullTitle;
-  $('#detail-note').textContent = item.note;
-  $('#detail-context').textContent = item.context || (item.kind === 'Marchio'
-    ? 'Questa scheda presenta un segno identificativo. Per leggere un’identità nel suo insieme, il marchio va affiancato ai materiali in cui viene usato e, quando disponibili, alle edizioni precedenti e successive.'
-    : 'Questo documento mostra una declinazione dell’identità su un supporto specifico. Tipografia, colore e composizione possono essere confrontati con il marchio e con gli altri materiali della stessa edizione.');
-  $('#detail-credit').textContent = item.credit;
-  $('#detail-source').href = item.source;
-  $('#detail-meta').replaceChildren();
-  for (const [label, value] of [['Documento', item.kind], ['Edizione', item.year || 'Anno non specifico']]) {
-    const group = document.createElement('div');
-    const dt = document.createElement('dt');
-    const dd = document.createElement('dd');
-    dt.textContent = label;
-    dd.textContent = value;
-    group.append(dt, dd);
-    $('#detail-meta').append(group);
-  }
   const gallery = item.gallery.length ? item.gallery : [{ src: item.src, label: item.kind }];
   const showImage = image => {
     resetImageZoom();
@@ -66,9 +83,7 @@ function renderDetail() {
     $('#detail-subtitle').textContent = related.fullTitle;
     $('#detail-credit').textContent = related.credit;
     $('#detail-source').href = related.source;
-    $('#detail-meta dd').textContent = related.kind;
-    $('#detail-meta div:last-child dd').textContent = related.year || 'Anno non specifico';
-    $('#detail-context').textContent = related.context || (related.kind === 'Marchio' ? 'Un segno è il punto di partenza: confrontalo con i manifesti e le applicazioni della stessa identità per osservare come diventa un sistema.' : 'Osserva come tipografia, colore e composizione traducono l’identità su questo supporto. Confronta il documento con il marchio e con gli altri materiali disponibili.');
+    renderFormat(related);
     for (const b of $('#detail-gallery').children) b.setAttribute('aria-pressed', String(b.dataset.src === image.src));
   };
   $('#detail-gallery').replaceChildren();
@@ -131,7 +146,8 @@ function applyFilters() {
   grid.setItems(results);
   $('#empty').hidden = results.length > 0;
   if (state.query || state.categories.size || state.kinds.size || state.year) map.classList.add('explored');
-  $('#result-count').textContent = `${results.length} ${results.length === 1 ? 'immagine' : 'immagini'}`;
+  const formatCount = new Set(results.map(item => item.formatId)).size;
+  $('#result-count').textContent = `${formatCount} ${formatCount === 1 ? 'formato' : 'formati'} / ${results.length} ${results.length === 1 ? 'immagine' : 'immagini'}`;
   $('#filters-status').textContent = results.length
     ? `${results.length} ${results.length === 1 ? 'immagine disponibile' : 'immagini disponibili'} con questa selezione.`
     : 'Nessun risultato. Prova a rimuovere un filtro.';
