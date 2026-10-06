@@ -74,9 +74,9 @@ export class InfiniteGrid {
           cell.dataset.index = index;
           cell.dataset.kind = item.kind || 'Marchio';
           cell.style.setProperty('--image-background', item.background || '#f5f3ef');
-          cell.setAttribute('aria-label', `Apri ${item.title}, ${item.kind}, ${item.year || 'anno non specifico'}`);
+          cell.setAttribute('aria-label', `Apri la scheda del formato ${item.title}`);
           const img = document.createElement('img');
-          img.src = item.src;
+          img.src = item.thumb || item.src;
           img.alt = item.title;
           img.draggable = false;
           img.decoding = 'async';
@@ -92,7 +92,7 @@ export class InfiniteGrid {
           const identifier = document.createElement('span');
           identifier.className = 'tile-id';
           identifier.textContent = String(item.archiveNumber || index + 1).padStart(3, '0');
-          meta.textContent = `${item.kind} / ${item.year || 's.d.'}`;
+          meta.textContent = item.category;
           caption.append(identifier, title, meta);
           cell.append(img, caption);
           this.layer.append(cell);

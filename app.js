@@ -1,319 +1,168 @@
-import { items } from './items.js?v=100';
-import { InfiniteGrid } from './infinite-grid.js?v=100';
-import { filterItems } from './catalogue.js?v=100';
-
-const $ = selector => document.querySelector(selector);
-const map = $('#map');
-const detail = $('#detail');
-const filters = $('#filters');
-const welcome = $('#onboarding');
-const state = { query: '', categories: new Set(), kinds: new Set(), year: '' };
-items.forEach((item, index) => { item.archiveNumber = index + 1; });
-let results = items;
-let currentIndex = 0;
-let searchTimer;
-let detailTrigger;
-const grid = new InfiniteGrid(map, $('#tiles'), items, openDetail);
-
-function renderFormat(item) {
-  const format = item.format;
-  $('#detail-meta').replaceChildren();
-  const fields = [['Documento', item.kind], ['Edizione dell’immagine', item.year || 'Anno non specifico'],
-    ['Formato', format.name], ['Stato della ricerca', format.status],
-    ['Titolare', format.owner], ['Produttore dell’edizione', format.producer],
-    ['Fondazione / prima edizione', format.firstEdition], ['Ricorrenza', format.recurrence],
-    ['Periodo censito', format.period], ['Sede', format.location],
-    ['Variabilità', format.variability], ['Edizioni confrontate', format.comparedEditions]];
-  for (const [label, value] of fields) {
-    const group = document.createElement('div');
-    const dt = document.createElement('dt');
-    const dd = document.createElement('dd');
-    dt.textContent = label;
-    dd.textContent = value || 'Non documentato';
-    group.append(dt, dd);
-    $('#detail-meta').append(group);
+import { InfiniteGrid } from './infinite-grid.js?v=20261006';
+import { filterFormats } from './catalogue.js?v=20261006';
+const $ = s => document.querySelector(s);
+const backIcon = '<svg class="icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5m6-6-6 6 6 6"/></svg>';
+const forwardIcon = '<svg class="icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 19 19 5M5 5h14v14"/></svg>';
+const data = await fetch(new URL('./archive-data.json?v=20261006', import.meta.url)).then(r => { if (!r.ok) throw new Error('Catalogo non disponibile'); return r.json(); }).catch(() => null);
+if (!data) { $('#empty').hidden = false; $('#empty h1').textContent = 'Archivio non disponibile'; $('#empty p:not(.eyebrow)').textContent = 'Ricarica la pagina per riprovare.'; $('#empty-reset').textContent = 'Ricarica'; $('#empty-reset').onclick = () => location.reload(); }
+else start(data);
+function start({ formats, cases, research }) {
+  const map = $('#map'), reader = $('#reader'), viewer = $('#image-viewer'), filters = $('#filters'), welcome = $('#onboarding');
+  const formatById = new Map(formats.map(f => [f.id, f])), caseById = new Map(cases.map(c => [c.id,c]));
+  const state = { query: '', categories: new Set(), recurrence: '', dimension: '', variability: '', caseOnly: false };
+  const recurrence = f => f.recurrence.toLocaleLowerCase('it').match(/annuale|biennale|triennale|quadriennale|quinquennale/)?.[0] || 'Altra ricorrenza';
+  formats.forEach(f => { f.recurrenceGroup = recurrence(f); f.variabilityGroup = f.variability.toLowerCase().match(/basso|medio|alto|nullo/)?.[0] || 'Da verificare'; });
+  let researchOrigin = '';
+  let results = formats, view = 'map', searchTimer, trigger, lastRoute = '', parentRoute = '', imageGroup = [], imageIndex = 0;
+  const routeScroll = new Map(), gridItems = fs => fs.map(f => ({ ...f, src: f.primary.src, thumb: f.primary.thumb, width:f.primary.width, height:f.primary.height, kind:f.primary.permanent?'Marchio':'Applicazione', background:'transparent' }));
+  const grid = new InfiniteGrid(map, $('#tiles'), gridItems(formats), (f, el) => { trigger=el; navigate('format/'+f.id); });
+  const escape = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const p = texts => texts.map(t => '<p>'+escape(t)+'</p>').join('');
+  const sourceLink = (url,title) => /^https?:\/\//.test(url || '') ? '<a target="_blank" rel="noopener noreferrer" href="'+escape(url)+'">'+escape(title)+' ↗</a>' : '<span>'+escape(title)+'</span>';
+  const fields = entries => '<dl class="format-facts">'+entries.map(([k,v])=>'<div><dt>'+escape(k)+'</dt><dd>'+escape(v||'Non documentato')+'</dd></div>').join('')+'</dl>';
+  const figure = (f,d) => '<figure class="document-figure"><button class="document-image" data-image="'+escape(d.id)+'" data-format="'+f.id+'" aria-label="Ingrandisci '+escape(d.label)+' di '+escape(f.name)+'"><img src="'+d.thumb+'" alt="'+escape(d.caption)+'" width="'+d.width+'" height="'+d.height+'" loading="lazy" decoding="async"></button><figcaption><span>'+escape(d.label)+' / '+(d.permanent?'Segno permanente':d.year||'s.d.')+'</span><p>'+escape(d.caption)+'</p>'+sourceLink(d.source,'Fonte')+'</figcaption></figure>';
+  function navigate(route) { if (route === location.hash.slice(1)) return; location.hash = route; }
+  function closeWelcome() { welcome.close(); try { localStorage.setItem('dte-intro','seen'); } catch {} map.focus({preventScroll:true}); }
+  $('#start').onclick=closeWelcome;
+  $('#about').onclick=$('#help').onclick=()=>{grid.stop();welcome.showModal();};
+  $('#welcome-research').onclick=()=>{closeWelcome();navigate('research');};
+  $('#research').onclick=$('#reader-research').onclick=()=>navigate('research');
+  const isArchiveRoute = r => !r || r==='index';
+  function setView(next, keepRoute=false) {
+    grid.stop(); view=next; map.hidden=next!=='map'; $('#illustrated-index').hidden=next!=='index';
+    $('#view-map').setAttribute('aria-pressed',String(next==='map'));$('#view-index').setAttribute('aria-pressed',String(next==='index'));
+    $('.footer-right').hidden=next!=='map';$('#instructions').textContent=next==='map'?'Trascina / Scorri in ogni direzione':'Seleziona un formato per consultarlo';
+    document.body.classList.toggle('index-view',next==='index');
+    if(next==='map') grid.resize();
+    if(!keepRoute && isArchiveRoute(location.hash.slice(1))) navigate(next==='index'?'index':'');
+    try { localStorage.setItem('dte-view',next); } catch {}
   }
-  $('#detail-context').textContent = `${item.note.startsWith(format.summary) ? '' : format.summary + '\n\n'}Segni permanenti: ${format.permanentSigns}.\n\nPeriodo e fase della variabilità: ${format.variabilityPeriod || 'Non documentati'}.`;
-  $('#detail-limits').textContent = format.limitations || 'Nessuna lacuna specificata nel foglio di ricerca.';
-  $('#detail-references').replaceChildren();
-  for (const source of format.sources) {
-    const li = document.createElement('li');
-    const link = document.createElement('a');
-    link.textContent = source.title;
-    link.href = source.url;
-    link.target = '_blank';
-    link.rel = 'noopener noreferrer';
-    li.append(link);
-    $('#detail-references').append(li);
+  $('#view-map').onclick=()=>setView('map');$('#view-index').onclick=()=>setView('index');
+  function indexRows() {
+    const rows = $('#index-rows'); rows.replaceChildren();
+    for (const f of [...results].sort((a,b)=>a.name.localeCompare(b.name,'it'))) {
+      const row = document.createElement('button');row.className='index-row';
+      row.innerHTML='<span class="row-number">'+String(f.archiveNumber).padStart(3,'0')+'</span><img src="'+f.primary.thumb+'" alt="" width="'+f.primary.width+'" height="'+f.primary.height+'" loading="lazy"><span class="row-title"><strong>'+escape(f.name)+'</strong><span>'+escape(f.category)+(f.cases.length?' / Caso studio':'')+'</span></span><span class="row-facts">'+escape(f.recurrence)+'<br>'+escape(f.dimension)+' / '+escape(f.variabilityGroup)+'</span><span class="row-arrow" aria-hidden="true">'+forwardIcon+'</span>';
+      row.onclick=()=>{trigger=row;navigate('format/'+f.id);}; rows.append(row);
+    }
   }
-}
-
-function openDetail(item, trigger) {
-  if (searchTimer) applyFilters();
-  if (!results.includes(item)) return;
-  grid.stop();
-  detailTrigger = trigger;
-  map.classList.add('explored');
-  currentIndex = Math.max(0, results.indexOf(item));
-  renderDetail();
-  if (!detail.open) detail.showModal();
-}
-
-function renderDetail() {
-  resetImageZoom();
-  const item = results[currentIndex];
-  setDetailView('image');
-  detail.style.setProperty('--title-size', item.title.length > 24 ? '43px' : item.title.length > 16 ? '53px' : '68px');
-  $('#detail-title').textContent = item.title;
-  $('#detail-category').textContent = item.category;
-  $('#detail-subtitle').textContent = item.fullTitle === item.title ? 'Documento visivo dell’archivio' : item.fullTitle;
-  const gallery = item.gallery.length ? item.gallery : [{ src: item.src, label: item.kind }];
-  const showImage = image => {
-    resetImageZoom();
-    const related = items.find(entry => entry.src === image.src) || item;
-    $('#detail-image').src = image.src;
-    $('#detail-image').alt = `${item.title} — ${image.label}`;
-    $('#detail-stage').style.background = 'transparent';
-    $('#detail-image').dataset.kind = related.kind;
-    updateImageTone();
-    $('#detail-teaser').textContent = related.note.length > 185 ? related.note.slice(0, 182).replace(/\s+\S*$/, '') + '…' : related.note;
-    $('#detail-document-label').textContent = `${related.kind} / ${related.year || 's.d.'}`;
-    $('#detail-image').style.padding = related.kind === 'Marchio' ? '24px' : '0';
-    $('#detail-note').textContent = related.note;
-    $('#detail-subtitle').textContent = related.fullTitle;
-    $('#detail-credit').textContent = related.credit;
-    $('#detail-source').href = related.source;
-    renderFormat(related);
-    for (const b of $('#detail-gallery').children) b.setAttribute('aria-pressed', String(b.dataset.src === image.src));
-  };
-  $('#detail-gallery').replaceChildren();
-  if (gallery.length > 1) for (const image of gallery) {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.dataset.src = image.src;
-    button.setAttribute('aria-label', `Mostra ${image.label}`);
-    button.setAttribute('aria-pressed', String(image.src === item.src));
-    const img = document.createElement('img');
-    img.src = image.src;
-    img.alt = image.label;
-    button.append(img);
-    button.addEventListener('click', () => showImage(image));
-    $('#detail-gallery').append(button);
+  function applyFilters() {
+    clearTimeout(searchTimer); results=filterFormats(formats,state); grid.setItems(gridItems(results)); indexRows();
+    $('#empty').hidden=results.length>0;
+    $('#result-count').textContent=results.length+' '+(results.length===1?'formato':'formati')+' / '+results.reduce((n,f)=>n+f.images.length,0)+' documenti';
+    $('#filters-status').textContent=results.length?results.length+' formati in entrambe le viste.':'Nessun formato. Prova a rimuovere un filtro.';
+    $('#show-results').textContent=results.length?'Mostra '+results.length+' formati':'Torna al catalogo';
+    $('#clear-search').hidden=!state.query;
+    const chips=$('#active-filters');chips.replaceChildren();
+    const add=(label,remove)=>{const b=document.createElement('button');b.textContent=label+' ×';b.setAttribute('aria-label','Rimuovi filtro '+label);b.onclick=()=>{remove();applyFilters();$('#open-filters').focus();};chips.append(b);};
+    for(const c of state.categories)add(c,()=>state.categories.delete(c));
+    for(const k of ['recurrence','dimension','variability'])if(state[k])add(state[k],()=>state[k]='');
+    if(state.caseOnly)add('Con caso studio',()=>state.caseOnly=false);
+    for(const k of ['recurrence','dimension','variability'])$('#'+k).value=state[k];
+    $('#case-only').checked=state.caseOnly;
+    for(const input of $('#categories').querySelectorAll('input'))input.checked=state.categories.has(input.value);
+    const n=chips.children.length;chips.hidden=!n;$('#filter-badge').hidden=!n;$('#filter-badge').textContent=n;
+    document.body.classList.toggle('has-filters',!!n);if(n||state.query)map.classList.add('explored');
   }
-  showImage(gallery.find(image => image.src === item.src) || gallery[0]);
-  $('#detail-position').textContent = `${currentIndex + 1} / ${results.length}`;
-  $('#previous').disabled = results.length < 2;
-  $('#next').disabled = results.length < 2;
-  detail.scrollTop = 0;
-}
-
-function renderFacets(container, field, values) {
-  for (const value of values) {
-    const label = document.createElement('label');
-    const checkbox = document.createElement('input');
-    checkbox.type = 'checkbox';
-    checkbox.value = value;
-    checkbox.dataset.field = field;
-    const name = document.createElement('span');
-    name.textContent = value;
-    const count = document.createElement('span');
-    count.className = 'facet-count';
-    count.textContent = items.filter(item => item[field === 'categories' ? 'category' : 'kind'] === value).length;
-    count.setAttribute('aria-hidden', 'true');
-    label.append(checkbox, name, count);
-    container.append(label);
-    checkbox.addEventListener('change', () => {
-      if (checkbox.checked) state[field].add(value);
-      else state[field].delete(value);
-      applyFilters();
-    });
+  for(const c of [...new Set(formats.map(f=>f.category))].sort((a,b)=>a.localeCompare(b,'it'))) {
+    const label=document.createElement('label'),input=document.createElement('input'),name=document.createElement('span'),count=document.createElement('span');
+    input.type='checkbox';input.value=c;name.textContent=c;count.className='facet-count';count.textContent=formats.filter(f=>f.category===c).length;label.append(input,name,count);$('#categories').append(label);
+    input.onchange=()=>{input.checked?state.categories.add(c):state.categories.delete(c);applyFilters();};
   }
-}
-renderFacets($('#categories'), 'categories', [...new Set(items.map(item => item.category))].sort((a, b) => a.localeCompare(b, 'it')));
-renderFacets($('#kinds'), 'kinds', ['Marchio', 'Manifesto', 'Grafica di edizione', 'Applicazione']);
-for (const year of [...new Set(items.map(item => item.year).filter(Boolean))].sort((a, b) => b - a)) {
-  const option = document.createElement('option');
-  option.value = year;
-  option.textContent = year;
-  $('#year').append(option);
-}
-$('#year').addEventListener('change', () => { state.year = $('#year').value; applyFilters(); });
-
-function applyFilters() {
-  clearTimeout(searchTimer);
-  searchTimer = null;
-  results = filterItems(items, state);
-  grid.setItems(results);
-  $('#empty').hidden = results.length > 0;
-  if (state.query || state.categories.size || state.kinds.size || state.year) map.classList.add('explored');
-  const formatCount = new Set(results.map(item => item.formatId)).size;
-  $('#result-count').textContent = `${formatCount} ${formatCount === 1 ? 'formato' : 'formati'} / ${results.length} ${results.length === 1 ? 'immagine' : 'immagini'}`;
-  $('#filters-status').textContent = results.length
-    ? `${results.length} ${results.length === 1 ? 'immagine disponibile' : 'immagini disponibili'} con questa selezione.`
-    : 'Nessun risultato. Prova a rimuovere un filtro.';
-  $('#show-results').textContent = results.length ? `Mostra ${results.length} ${results.length === 1 ? 'immagine' : 'immagini'}` : 'Torna alla mappa';
-  const count = state.categories.size + state.kinds.size + Number(Boolean(state.year));
-  $('#filter-badge').hidden = count === 0;
-  $('#filter-badge').textContent = count;
-  $('#clear-search').hidden = !state.query;
-  $('#year').value = state.year;
-  for (const checkbox of filters.querySelectorAll('input[type="checkbox"]')) checkbox.checked = state[checkbox.dataset.field].has(checkbox.value);
-  const chips = $('#active-filters');
-  chips.replaceChildren();
-  function addChip(text, remove) {
-    const button = document.createElement('button');
-    button.textContent = `${text} ×`;
-    button.setAttribute('aria-label', `Rimuovi filtro ${text}`);
-    button.addEventListener('click', () => { remove(); applyFilters(); $('#open-filters').focus(); });
-    chips.append(button);
+  for(const [key,field] of [['recurrence','recurrenceGroup'],['dimension','dimension'],['variability','variabilityGroup']]) {
+    const select=$('#'+key);select.add(new Option('Tutti i valori',''));
+    for(const val of [...new Set(formats.map(f=>f[field]).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'it')))select.add(new Option(val,val));
+    select.onchange=()=>{state[key]=select.value;applyFilters();};
   }
-  for (const category of state.categories) addChip(category, () => state.categories.delete(category));
-  for (const kind of state.kinds) addChip(kind, () => state.kinds.delete(kind));
-  if (state.year) addChip(state.year === 'undated' ? 'Senza anno' : state.year, () => { state.year = ''; });
-  chips.hidden = !count;
-  document.body.classList.toggle('has-filters', Boolean(count));
-}
-function clearFilters(includeQuery = false) {
-  state.categories.clear();
-  state.kinds.clear();
-  state.year = '';
-  if (includeQuery) { state.query = ''; $('#search').value = ''; }
+  $('#case-only').onchange=()=>{state.caseOnly=$('#case-only').checked;applyFilters();};
+  function resetFilters(query=false) {state.categories.clear();for(const k of ['recurrence','dimension','variability'])state[k]='';state.caseOnly=false;if(query){state.query='';$('#search').value='';}applyFilters();}
+  $('#clear-filters').onclick=()=>resetFilters();$('#empty-reset').onclick=()=>resetFilters(true);
+  $('#search').oninput=()=>{state.query=$('#search').value;clearTimeout(searchTimer);searchTimer=setTimeout(applyFilters,100);};
+  $('#clear-search').onclick=()=>{state.query='';$('#search').value='';applyFilters();$('#search').focus();};
+  $('#open-filters').onclick=()=>{grid.stop();filters.showModal();};$('#close-filters').onclick=$('#show-results').onclick=()=>filters.close();
+  function zoom(v) {const z=grid.setZoom(v);$('#zoom-value').textContent=Math.round(z*100)+'%';$('#zoom-out').disabled=z<=.65;$('#zoom-in').disabled=z>=1.4;}
+  $('#zoom-in').onclick=()=>{zoom(grid.zoom+.15);map.classList.add('explored');};$('#zoom-out').onclick=()=>{zoom(grid.zoom-.15);map.classList.add('explored');};
+  $('#reset').onclick=()=>{zoom(1);grid.reset();map.classList.remove('explored');};
+  map.addEventListener('wheel',()=>map.classList.add('explored'),{passive:true});map.addEventListener('pointermove',()=>{if(grid.pointer?.dragged)map.classList.add('explored');});map.addEventListener('keydown',e=>{if(e.key.startsWith('Arrow'))map.classList.add('explored');});
+  function formatHTML(f) {
+    const primary=f.primary, related=f.cases.map(id=>caseById.get(id));
+    let html='<div class="reader-heading"><h1 id="reader-title">'+escape(f.name)+'</h1><p class="eyebrow">'+escape(f.category)+'</p><p class="reader-deck">'+escape(f.recurrence)+' · '+escape(f.dimension)+' · Variabilità '+escape(f.variabilityGroup)+'</p></div><div class="format-introduction"><button class="format-cover document-image" data-image="'+primary.id+'" data-format="'+f.id+'" aria-label="Ingrandisci immagine principale"><img src="'+primary.src+'" alt="'+escape(primary.caption)+'" width="'+primary.width+'" height="'+primary.height+'"></button><div><p class="lead">'+escape(f.summary)+'</p><p class="eyebrow">'+(primary.permanent?'Marchio del formato':escape(primary.label)+' / '+(primary.year||'s.d.'))+'</p><nav class="section-links" aria-label="In questa scheda"><a href="#format/'+f.id+'/informazioni">Informazioni ↓</a><a href="#format/'+f.id+'/identita">Identità visive ↓</a>'+(related.length?'<a href="#format/'+f.id+'/edizioni">Edizioni e casi studio ↓</a>':'')+'</nav></div></div>';
+    html+='<section id="informazioni"><div class="section-heading"><h2>Continuità e variabilità</h2></div>'+fields([['Titolare',f.owner],['Produttore dell’edizione',f.producer],['Prima edizione / fondazione',f.firstEdition],['Ricorrenza',f.recurrence],['Arco storico osservato',f.period],['Edizioni censite',f.editionCount],[f.informationSource==='tesi'?'Durata dell’edizione':'Durata media (giorni)',f.duration],['Sede',f.location],['Dimensione',f.dimension],['Variabilità esercitata',f.variability],['Periodo e fase della variabilità',f.variabilityPeriod],['Segni permanenti',f.permanentSigns]])+'</section>';
+    html+='<section id="identita"><div class="section-heading"><h2>Le identità, nel tempo</h2><p>Marchi e applicazioni raccolti, ordinati per anno. Seleziona un’immagine per leggere didascalia e fonte.</p></div>';
+    const groups=new Map();for(const d of f.images){const k=d.permanent?'permanente':d.year?String(d.year):'senza-data';if(!groups.has(k))groups.set(k,[]);groups.get(k).push(d);}
+    const keys=[...groups.keys()].sort((a,b)=>a==='permanente'?-1:b==='permanente'?1:a==='senza-data'?1:b==='senza-data'?-1:Number(a)-Number(b));
+    for(const k of keys)html+='<div class="year-group"><h3>'+({permanente:'Segni permanenti','senza-data':'Anno non documentato'}[k]||k)+'</h3><div class="document-grid">'+groups.get(k).map(d=>figure(f,d)).join('')+'</div></div>';
+    html+='</section>';
+    if(related.length) {
+      html+='<section id="edizioni"><div class="section-heading"><h2>Le edizioni del formato</h2><p>Serie censita nel capitolo '+escape(f.thesisChapter)+' della tesi. I marchi disponibili accompagnano le edizioni; le assenze sono dichiarate. Solo le edizioni selezionate aprono un approfondimento.</p></div><div class="case-links">'+related.map(c=>'<a class="case-link" href="#edition/'+c.id+'"><span class="eyebrow">Caso studio / '+c.year+'</span><strong>'+escape(c.title)+'</strong><span aria-hidden="true">'+forwardIcon+'</span></a>').join('')+'</div><div class="edition-series">';
+      for(const e of f.editions){const logo=f.images.find(d=>d.id===e.logo);html+='<div class="series-entry">'+(logo?'<button class="series-image document-image" data-format="'+f.id+'" data-image="'+logo.id+'" aria-label="Ingrandisci marchio '+e.year+'"><img src="'+logo.thumb+'" alt="'+escape(logo.label)+' '+e.year+'" loading="lazy"></button>':'<span class="missing-mark">Marchio<br>non raccolto</span>')+'<div><h3>'+e.year+'</h3><p>'+escape(e.place)+'</p><span class="eyebrow">'+escape(e.duration)+'</span></div>'+(e.caseId?'<a class="series-case" href="#edition/'+e.caseId+'">Caso studio ↗</a>':'')+'</div>';}
+      html+='</div></section>';
+    }
+    return html+'<section class="sources-section"><div class="section-heading"><h2>Verificare, continuare</h2></div><p>Stato nel foglio di ricerca: '+escape(f.status)+'. '+escape(f.reason)+'</p><p>'+escape(f.limitations||'Nessuna lacuna specifica annotata nel foglio.')+'</p><ul>'+f.sources.map(s=>'<li>'+sourceLink(s.url,s.title)+'</li>').join('')+(f.thesisChapter?'<li>'+sourceLink(research.thesis,'Tesi / capitolo '+f.thesisChapter)+'</li>':'')+'</ul><p class="source-note">Le immagini conservano la provenienza registrata nella raccolta. Quando l’autore non è identificato, consulta la fonte originale.</p></section>';
+  }
+  function caseHTML(c) {
+    const f=formatById.get(c.formatId),imgs=c.images.map(id=>f.images.find(d=>d.id===id)),parts=c.lifecycle.filter(Boolean),n=parts.length;
+    return '<div class="reader-heading"><h1 id="reader-title">'+escape(c.title)+'</h1><p class="eyebrow">'+escape(f.name)+'</p><p class="reader-deck">'+escape(c.fields['Sede e date'])+'</p><p class="eyebrow">Analisi al momento della stesura della tesi</p></div>'+(imgs.length?'<div class="case-hero">'+figure(f,imgs[0])+'</div>':'')+'<details class="case-information"><summary>Informazioni dell’edizione e autori del progetto</summary>'+fields(Object.entries(c.fields).filter(([k])=>k!=='Formato'))+'</details><section><div class="section-heading"><h2>Un’identità per questa edizione</h2></div><div class="reading-column">'+p(c.description)+'</div></section><section><div class="section-heading"><h2>Marchi e applicazioni</h2></div>'+(imgs.length?'<div class="document-grid">'+imgs.map(d=>figure(f,d)).join('')+'</div>':'<p class="document-gap">I materiali visivi di questa edizione non sono ancora presenti nelle cartelle fornite. Il caso resta consultabile attraverso l’analisi e le fonti.</p>')+'</section><section><div class="section-heading"><h2>Ciò che attraversa la serie</h2></div><div class="reading-column"><p>'+escape(f.permanentSigns)+'.</p><p>Variabilità del formato: '+escape(f.variability)+'. Periodo osservato: '+escape(f.variabilityPeriod||f.period)+'.</p><a href="#format/'+f.id+'">Confronta le altre edizioni di '+escape(f.name)+' ↗</a></div></section><section><div class="section-heading"><h2>Prima, durante, dopo</h2><p>Le fasi descrivono il ciclo del progetto. Le date sotto sono quelle documentate nella tesi.</p></div><div class="lifecycle"><section><span class="phase-number">01</span><h3>Presentazione</h3>'+p(parts.slice(0,Math.max(1,n-2)))+'</section><section><span class="phase-number">02</span><h3>Evento</h3>'+p(n>=3?[parts[n-2]]:[])+'</section><section><span class="phase-number">03</span><h3>Post-evento</h3>'+p(n>=2?[parts[n-1]]:[])+'</section></div><details class="dates" open><summary>Date e passaggi del progetto</summary><ol>'+c.dates.map(t=>'<li>'+escape(t)+'</li>').join('')+'</ol></details></section><section class="sources-section"><h2>Fonti dell’approfondimento</h2><p>'+escape(c.sourceNote)+'</p>'+sourceLink(c.source,'Tesi / capitolo '+c.chapter)+'<ul>'+f.sources.map(s=>'<li>'+sourceLink(s.url,s.title)+'</li>').join('')+'</ul><a class="return-format" href="#format/'+f.id+'">← Torna alla scheda del formato</a></section>';
+  }
+  function researchHTML() {
+    const glossary=research.glossary.map(g=>'<div><dt>'+escape(g.term)+'</dt><dd>'+escape(g.definition)+'</dd></div>').join('');
+    return '<div class="reader-heading"><h1 id="reader-title">'+escape(research.title)+'</h1><p class="reader-deck">Una ricerca di '+escape(research.author)+'</p></div><div class="reading-column"><p class="research-question">'+escape(research.question)+'</p>'+p(research.introduction)+'<section><h2>Metodo</h2>'+p(research.method)+'</section><section><h2>Criteri di selezione</h2>'+p(research.selection)+'</section><section><h2>Glossario</h2><dl class="glossary">'+glossary+'</dl></section><section><h2>Gradi di variabilità</h2><dl class="glossary">'+research.variability.map(g=>'<div><dt>'+escape(g.term)+'</dt><dd>'+escape(g.definition)+'</dd></div>').join('')+'</dl><p>Il grado va letto insieme al periodo e alla fase dichiarati nella scheda. Le categorie non sostituiscono il confronto tra le immagini.</p></section><section><h2>Bibliografia e fonti</h2><details><summary>Riferimenti bibliografici della tesi</summary><ul class="bibliography">'+research.bibliography.map(t=>'<li>'+escape(t)+'</li>').join('')+'</ul></details><details><summary>Repertori e fonti documentarie</summary><ul class="bibliography">'+research.repertories.map(t=>'<li>'+escape(t)+'</li>').join('')+'</ul></details>'+sourceLink(research.thesis,'Consulta la tesi completa')+'</section><section><h2>Crediti e documentazione</h2><p>Ricerca e testi: Nicolò Armelin. Marchi, immagini e progetti appartengono ai rispettivi autori e titolari; la provenienza è indicata su ogni documento. L’archivio rende esplicite le lacune della raccolta.</p><p>Carattere graziato: '+sourceLink('https://github.com/google/fonts/tree/main/ofl/instrumentserif','Instrument Serif / SIL Open Font License')+'.</p><button class="primary" data-archive>Esplora il catalogo ↗</button></section></div>';
+  }
+  $('#reader-content').addEventListener('click',e=>{
+    const b=e.target.closest('[data-image]');if(b){parentRoute=location.hash.slice(1).split('/').slice(0,2).join('/');imageGroup=[...b.closest('.document-grid, .edition-series, .format-introduction, .case-hero').querySelectorAll('[data-image]')].map(el=>el.dataset.image);navigate('image/'+b.dataset.format+'/'+b.dataset.image);}
+    if(e.target.closest('[data-archive]'))navigate(view==='index'?'index':'');
+  });
+  const closeReader=()=>navigate(view==='index'?'index':'');
+  $('#reader-close').onclick=closeReader;
+  $('#reader-back').onclick=()=>{const route=location.hash.slice(1);if(route==='research'&&researchOrigin){navigate(researchOrigin);return;}const c=route.startsWith('edition/')?caseById.get(route.split('/')[1]):null;navigate(c?'format/'+c.formatId:view==='index'?'index':'');};
+  reader.addEventListener('cancel',e=>{e.preventDefault();closeReader();});
+  function renderImage(f,d) {
+    if(!imageGroup.includes(d.id))imageGroup=f.images.map(i=>i.id);imageIndex=imageGroup.indexOf(d.id);
+    $('#viewer-image').src=d.src;$('#viewer-image').alt=d.caption;$('#viewer-image').hidden=false;$('#image-error').hidden=true;
+    $('#image-title').textContent=d.label;$('#image-context').textContent=f.name+' / '+(d.permanent?'Segno permanente':d.year||'Anno non documentato');
+    $('#image-caption').textContent=d.caption;$('#image-credit').textContent=d.credit+(d.quality?' '+d.quality+'.':'');
+    $('#image-source').href=d.source||f.sources[0]?.url||research.thesis;$('#image-position').textContent=(imageIndex+1)+' / '+imageGroup.length;
+    $('#image-prev').disabled=$('#image-next').disabled=imageGroup.length<2;
+    if(!viewer.open)viewer.showModal();
+  }
+  $('#viewer-image').onerror=()=>{$('#viewer-image').hidden=true;$('#image-error').hidden=false;};
+  const closeImage=()=>navigate(parentRoute||'format/'+location.hash.split('/')[1]);
+  $('#image-close').onclick=closeImage;viewer.addEventListener('cancel',e=>{e.preventDefault();closeImage();});
+  $('#image-tone').onclick=()=>{const dark=viewer.classList.toggle('is-dark');$('#image-tone').setAttribute('aria-pressed',String(dark));};
+  function stepImage(delta) {if(imageGroup.length<2)return;const f=location.hash.split('/')[1];imageIndex=(imageIndex+delta+imageGroup.length)%imageGroup.length;location.replace('#image/'+f+'/'+imageGroup[imageIndex]);}
+  $('#image-prev').onclick=()=>stepImage(-1);$('#image-next').onclick=()=>stepImage(1);
+  viewer.addEventListener('keydown',e=>{if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();stepImage(e.key==='ArrowRight'?1:-1);}});
+  function renderRoute() {
+    const route=decodeURIComponent(location.hash.slice(1)),[kind,id,extra]=route.split('/');
+    if(reader.open && !lastRoute.startsWith('image/'))routeScroll.set(lastRoute.split('/').slice(0,2).join('/'),$('#reader-scroll').scrollTop);
+    if(kind!=='image'&&viewer.open)viewer.close();
+    if(isArchiveRoute(route)) {
+      if(reader.open)reader.close();if(route==='index')setView('index',true);else if(lastRoute==='index')setView('map',true);
+      if(trigger?.isConnected)trigger.focus({preventScroll:true});else (view==='map'?map:$('#view-index')).focus({preventScroll:true});
+      lastRoute=route;return;
+    }
+    grid.stop();map.classList.add('explored');
+    if(kind==='image') {
+      const f=formatById.get(id),d=f?.images.find(d=>d.id===extra);if(!d){navigate('format/'+id);return;}
+      if(!reader.open){parentRoute='format/'+id;$('#reader-content').innerHTML=formatHTML(f);$('#reader-back').innerHTML=backIcon+'Archivio';reader.showModal();}
+      renderImage(f,d);lastRoute=route;return;
+    }
+    let html,back='← Archivio',position='La ricerca';
+    if(kind==='format'&&formatById.has(id)){const f=formatById.get(id);html=formatHTML(f);position=String(f.archiveNumber).padStart(3,'0')+' / Formato';}
+    else if(kind==='edition'&&caseById.has(id)){const c=caseById.get(id);html=caseHTML(c);back='← Al formato';position='Edizione / '+c.year;}
+    else if(kind==='research'){if(lastRoute.startsWith('format/')||lastRoute.startsWith('edition/'))researchOrigin=lastRoute.split('/').slice(0,2).join('/');html=researchHTML();if(researchOrigin)back='← Alla scheda';}
+    else {html='<div class="reader-heading"><p class="eyebrow">Archivio</p><h1 id="reader-title">Scheda non trovata</h1><p>Il collegamento non corrisponde a un formato o a un’edizione del catalogo.</p><button data-archive class="primary">Torna all’archivio</button></div>';}
+    $('#reader-content').innerHTML=html;$('#reader-back').innerHTML=backIcon+escape(back.replace(/^← /,''));$('#reader-position').textContent=position;$('#reader-research').hidden=kind==='research';
+    if(!reader.open)reader.showModal();
+    const scroll=$('#reader-scroll'),section=extra&&$('#reader-content').querySelector('#'+CSS.escape(extra));
+    scroll.scrollTop=section?section.offsetTop-12:(routeScroll.get(kind+'/'+id)||0);
+    if(!lastRoute.startsWith('image/'))$('#reader-back').focus({preventScroll:true});
+    lastRoute=route;
+  }
+  for(const dialog of [filters,welcome,reader,viewer])dialog.addEventListener('click',e=>{if(e.target!==dialog||dialog===welcome)return;const r=dialog.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom){if(dialog===reader)closeReader();else if(dialog===viewer)closeImage();else dialog.close();}});
   applyFilters();
+  try {if(localStorage.getItem('dte-view')==='index' && !location.hash)setView('index',true);}catch{}
+  window.addEventListener('hashchange',renderRoute);renderRoute();
+  let seen=false;try{seen=localStorage.getItem('dte-intro')==='seen';}catch{}
+  if(!seen&&!location.hash)welcome.showModal();
 }
-$('#search').addEventListener('input', () => {
-  state.query = $('#search').value;
-  clearTimeout(searchTimer);
-  searchTimer = setTimeout(applyFilters, 100);
-});
-$('#clear-search').addEventListener('click', () => { state.query = ''; $('#search').value = ''; applyFilters(); $('#search').focus(); });
-$('#empty-reset').addEventListener('click', () => { clearFilters(true); map.focus(); });
-$('#clear-filters').addEventListener('click', () => clearFilters());
-function updateZoom(value) {
-  const zoom = grid.setZoom(value);
-  $('#zoom-value').textContent = `${Math.round(zoom * 100)}%`;
-  $('#zoom-out').disabled = zoom <= .65;
-  $('#zoom-in').disabled = zoom >= 1.4;
-}
-$('#reset').addEventListener('click', () => { updateZoom(1); grid.reset(); map.classList.remove('explored'); map.focus(); });
-for (const [id, delta] of [['zoom-out', -.15], ['zoom-in', .15]]) $( '#' + id).addEventListener('click', () => {
-  updateZoom(grid.zoom + delta);
-  map.classList.add('explored');
-});
-map.addEventListener('wheel', e => { if (!e.ctrlKey && !e.metaKey) map.classList.add('explored'); }, { passive: true });
-map.addEventListener('pointermove', () => { if (grid.pointer?.dragged) map.classList.add('explored'); });
-map.addEventListener('keydown', e => { if (e.key.startsWith('Arrow')) map.classList.add('explored'); });
-$('#open-filters').addEventListener('click', () => { grid.stop(); filters.showModal(); });
-$('#close-filters').addEventListener('click', () => filters.close());
-$('#show-results').addEventListener('click', () => filters.close());
-$('#close').addEventListener('click', () => detail.close());
-detail.addEventListener('keydown', e => {
-  if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || (imageZoom && e.target === $('#detail-stage'))) return;
-  if (!['ArrowLeft', 'ArrowRight'].includes(e.key) || results.length < 2) return;
-  e.preventDefault();
-  currentIndex = (currentIndex + (e.key === 'ArrowRight' ? 1 : -1) + results.length) % results.length;
-  renderDetail();
-});
-$('#previous').addEventListener('click', () => { currentIndex = (currentIndex - 1 + results.length) % results.length; renderDetail(); });
-$('#next').addEventListener('click', () => { currentIndex = (currentIndex + 1) % results.length; renderDetail(); });
-for (const modal of [detail, filters]) modal.addEventListener('click', e => {
-  if (e.target !== modal) return;
-  const r = modal.getBoundingClientRect();
-  if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) modal.close();
-});
-detail.addEventListener('close', () => {
-  const target = detailTrigger?.isConnected && detailTrigger.tabIndex === 0 ? detailTrigger : map;
-  target.focus({ preventScroll: true });
-});
-filters.addEventListener('close', () => $('#open-filters').focus());
-const openWelcome = () => { grid.stop(); welcome.showModal(); };
-$('#about').addEventListener('click', openWelcome);
-$('#help').addEventListener('click', openWelcome);
-$('#start').addEventListener('click', () => welcome.close());
-welcome.addEventListener('close', () => {
-  try { localStorage.setItem('dte-intro-v2', 'seen'); } catch { /* The archive also works without storage. */ }
-  map.focus({ preventScroll: true });
-});
-applyFilters();
-let seen = false;
-try { seen = localStorage.getItem('dte-intro-v2') === 'seen'; } catch { /* Show the intro when storage is unavailable. */ }
-if (!seen) openWelcome();
-
-let imageZoom = false;
-let imagePointer = null;
-let imageX = 0, imageY = 0;
-function resetImageZoom() {
-  imageZoom = false;
-  imageX = imageY = 0;
-  const stage = $('#detail-stage');
-  for (const pointerId of [imagePointer?.id].filter(id => id !== undefined)) if (stage.hasPointerCapture(pointerId)) stage.releasePointerCapture(pointerId);
-  imagePointer = null;
-  stage.classList.remove('zoomed');
-  $('#detail-image').style.transform = '';
-  $('#detail-zoom').textContent = 'Ingrandisci ↗';
-  $('#detail-zoom').setAttribute('aria-pressed', 'false');
-}
-function toggleImageZoom() {
-  if (imageZoom) { resetImageZoom(); return; }
-  imageZoom = true;
-  $('#detail-stage').classList.add('zoomed');
-  $('#detail-image').style.transform = 'scale(2)';
-  $('#detail-zoom').textContent = 'Immagine intera ↙';
-  $('#detail-zoom').setAttribute('aria-pressed', 'true');
-}
-$('#detail-zoom').addEventListener('click', toggleImageZoom);
-$('#detail-stage').addEventListener('dblclick', toggleImageZoom);
-function panImage(dx, dy) {
-  const stage = $('#detail-stage');
-  const image = $('#detail-image');
-  if (!image.naturalWidth || !image.naturalHeight) return;
-  const aspect = image.naturalWidth / image.naturalHeight;
-  const renderedW = Math.min(stage.clientWidth, stage.clientHeight * aspect);
-  const renderedH = renderedW / aspect;
-  const limitX = Math.max(0, (renderedW * 2 - stage.clientWidth) / 2);
-  const limitY = Math.max(0, (renderedH * 2 - stage.clientHeight) / 2);
-  imageX = Math.max(-limitX, Math.min(limitX, imageX + dx));
-  imageY = Math.max(-limitY, Math.min(limitY, imageY + dy));
-  image.style.transform = `translate(${imageX}px, ${imageY}px) scale(2)`;
-}
-$('#detail-stage').addEventListener('keydown', e => {
-  if (e.key === 'Enter') { e.preventDefault(); toggleImageZoom(); }
-  const directions = { ArrowLeft: [40, 0], ArrowRight: [-40, 0], ArrowUp: [0, 40], ArrowDown: [0, -40] };
-  if (imageZoom && directions[e.key]) { e.preventDefault(); panImage(...directions[e.key]); }
-});
-$('#detail-stage').addEventListener('pointerdown', e => {
-  if (!imageZoom || !e.isPrimary || e.button !== 0) return;
-  imagePointer = { id: e.pointerId, x: e.clientX, y: e.clientY };
-  $('#detail-stage').setPointerCapture(e.pointerId);
-});
-$('#detail-stage').addEventListener('pointermove', e => {
-  if (!imagePointer || imagePointer.id !== e.pointerId) return;
-  panImage(e.clientX - imagePointer.x, e.clientY - imagePointer.y);
-  imagePointer.x = e.clientX; imagePointer.y = e.clientY;
-});
-for (const event of ['pointerup', 'pointercancel', 'lostpointercapture']) $('#detail-stage').addEventListener(event, e => {
-  if (imagePointer?.id !== e.pointerId) return;
-  imagePointer = null;
-  if ($('#detail-stage').hasPointerCapture(e.pointerId)) $('#detail-stage').releasePointerCapture(e.pointerId);
-});
-detail.addEventListener('close', resetImageZoom);
-
-function setDetailView(view) {
-  detail.dataset.view = view;
-  $('#detail .detail-layout').scrollTop = 0;
-  $('#detail-image-pane').hidden = view !== 'image';
-  $('#detail-reading-pane').hidden = view !== 'reading';
-  $('#tab-image').setAttribute('aria-pressed', String(view === 'image'));
-  $('#tab-reading').setAttribute('aria-pressed', String(view === 'reading'));
-  detail.scrollTop = 0;
-}
-$('#tab-image').addEventListener('click', () => setDetailView('image'));
-$('#tab-reading').addEventListener('click', () => setDetailView('reading'));
-$('#read-more').addEventListener('click', () => { setDetailView('reading'); $('#tab-reading').focus(); });
-function updateImageTone() {
-  $('#detail-image').style.mixBlendMode = $('#detail-image').dataset.kind === 'Marchio' && !detail.classList.contains('is-dark') ? 'multiply' : 'normal';
-}
-$('#detail-tone').addEventListener('click', () => {
-  const dark = detail.classList.toggle('is-dark');
-  $('#detail-tone').setAttribute('aria-pressed', String(dark));
-  updateImageTone();
-});

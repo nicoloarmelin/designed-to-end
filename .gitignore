@@ -1,4 +1,9 @@
 .DS_Store
-assets/fonts/
+assets/fonts/*Trial*
+assets/fonts/*.otf
+.impeccable/
+PRODUCT.md
+DESIGN.md
+assets/**/*.webp.json
 .env
 .env.*
