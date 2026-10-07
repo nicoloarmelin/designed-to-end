@@ -6,9 +6,10 @@ Archivio digitale sulle identità visive dei formati di eventi e delle loro ediz
 
 ## Consultazione
 
-- Mosaico con trascinamento e scroll su due assi, inerzia e zoom; indice illustrato degli stessi 100 formati.
+- Mosaico con trascinamento e scroll su due assi, inerzia e zoom; ogni formato occupa una posizione unica, senza righe duplicate. Indice illustrato degli stessi 100 formati.
+- Titolo iniziale in negativo sulle immagini, che scompare quando si esplora la mappa.
 - Ricerca e filtri condivisi per ambito, ricorrenza, dimensione, variabilità e presenza di casi studio.
-- Una scheda per formato, con informazioni, fonti e marchi/applicazioni raggruppati per anno.
+- Schede editoriali con applicazioni grandi, marchi compatti, proporzioni originali e didascalie; informazioni e fonti, con materiali raggruppati per anno.
 - Sei formati approfonditi nella tesi: 206 edizioni censite e tredici schede di casi studio con progetto, autori, ciclo di vita e date documentate.
 - Immagini ingrandibili con didascalia, provenienza e visualizzazione su fondo chiaro/scuro.
 - Sezione La ricerca: domanda, metodo, criteri, glossario, gradi di variabilità, bibliografia e crediti.
@@ -25,6 +26,8 @@ Fonti principali: [foglio dell’archivio](https://docs.google.com/spreadsheets/
 ## Tipografia
 
 Instrument Serif, distribuito con SIL Open Font License (`assets/fonts/OFL.txt`), per titoli e lettura; Courier New per i controlli. I caratteri ABC Gaisyr Trial del prototipo non sono inclusi nell’anteprima pubblica.
+
+L’anteprima locale può caricare Office Times Trial tramite `preview-fonts.css`, escluso dal repository insieme ai file Trial. La distribuzione pubblica mantiene i font liberi finché non è disponibile un’autorizzazione web. Il parametro locale `?public-preview` permette di verificare la tipografia della versione pubblica.
 
 ## Avvio locale e pubblicazione
 

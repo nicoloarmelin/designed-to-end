@@ -1,9 +1,10 @@
-import { InfiniteGrid } from './infinite-grid.js?v=20261006';
-import { filterFormats } from './catalogue.js?v=20261006';
+if (['localhost','127.0.0.1'].includes(location.hostname) && !new URLSearchParams(location.search).has('public-preview')) { const fontSheet=document.createElement('link');fontSheet.rel='stylesheet';fontSheet.href='./preview-fonts.css';document.head.append(fontSheet); }
+import { InfiniteGrid } from './infinite-grid.js?v=20261006-editorial-1';
+import { filterFormats } from './catalogue.js?v=20261006-editorial-1';
 const $ = s => document.querySelector(s);
 const backIcon = '<svg class="icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5m6-6-6 6 6 6"/></svg>';
 const forwardIcon = '<svg class="icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 19 19 5M5 5h14v14"/></svg>';
-const data = await fetch(new URL('./archive-data.json?v=20261006', import.meta.url)).then(r => { if (!r.ok) throw new Error('Catalogo non disponibile'); return r.json(); }).catch(() => null);
+const data = await fetch(new URL('./archive-data.json?v=20261006-editorial-1', import.meta.url)).then(r => { if (!r.ok) throw new Error('Catalogo non disponibile'); return r.json(); }).catch(() => null);
 if (!data) { $('#empty').hidden = false; $('#empty h1').textContent = 'Archivio non disponibile'; $('#empty p:not(.eyebrow)').textContent = 'Ricarica la pagina per riprovare.'; $('#empty-reset').textContent = 'Ricarica'; $('#empty-reset').onclick = () => location.reload(); }
 else start(data);
 function start({ formats, cases, research }) {
@@ -20,7 +21,25 @@ function start({ formats, cases, research }) {
   const p = texts => texts.map(t => '<p>'+escape(t)+'</p>').join('');
   const sourceLink = (url,title) => /^https?:\/\//.test(url || '') ? '<a target="_blank" rel="noopener noreferrer" href="'+escape(url)+'">'+escape(title)+' ↗</a>' : '<span>'+escape(title)+'</span>';
   const fields = entries => '<dl class="format-facts">'+entries.map(([k,v])=>'<div><dt>'+escape(k)+'</dt><dd>'+escape(v||'Non documentato')+'</dd></div>').join('')+'</dl>';
-  const figure = (f,d) => '<figure class="document-figure"><button class="document-image" data-image="'+escape(d.id)+'" data-format="'+f.id+'" aria-label="Ingrandisci '+escape(d.label)+' di '+escape(f.name)+'"><img src="'+d.thumb+'" alt="'+escape(d.caption)+'" width="'+d.width+'" height="'+d.height+'" loading="lazy" decoding="async"></button><figcaption><span>'+escape(d.label)+' / '+(d.permanent?'Segno permanente':d.year||'s.d.')+'</span><p>'+escape(d.caption)+'</p>'+sourceLink(d.source,'Fonte')+'</figcaption></figure>';
+  const isMark = d => d.permanent || /^marchio|^logo$/.test(d.type);
+  const feature = docs => [...docs].sort((a,b) => {
+    const score = d => (isMark(d)?0:40) + ({allestimento:30,applicazione:20,applicazioni:20,manifesto:15,segnaletica:10}[d.type]||0) + Math.min(d.width*d.height/100000,12) - (d.width<600?25:0);
+    return score(b)-score(a);
+  })[0];
+  const figure = (f,d,extra='') => {
+    const mark=isMark(d),ratio=d.width/d.height;
+    const srcset=d.width>480?' srcset="'+d.thumb+' 480w, '+d.src+' '+d.width+'w" sizes="(max-width: 640px) calc(100vw - 56px), (max-width: 960px) 70vw, 900px"':'';
+    return '<figure class="document-figure '+(mark?'document-mark':ratio<.85?'document-portrait':'document-application')+' '+extra+'"><button class="document-image" data-image="'+escape(d.id)+'" data-format="'+f.id+'" aria-label="Ingrandisci '+escape(d.label)+' di '+escape(f.name)+'"><img src="'+d.src+'"'+srcset+' alt="'+escape(d.caption)+'" width="'+d.width+'" height="'+d.height+'" loading="lazy" decoding="async"></button><figcaption><div class="document-meta"><span>'+escape(d.label)+' / '+(d.permanent?'Segno permanente':d.year||'s.d.')+'</span>'+sourceLink(d.source,'Fonte')+'</div><p>'+escape(d.caption)+'</p></figcaption></figure>';
+  };
+  function gallery(f,docs) {
+    if(!docs.length)return '';
+    const lead=feature(docs),ordered=[lead,...docs.filter(d=>d.id!==lead.id)];let html='<div class="document-grid editorial-gallery">';
+    for(let i=0;i<ordered.length;i+=2){const pair=ordered.slice(i,i+2);let spans=[6,6];if(pair.length===1)spans=[isMark(pair[0])?5:12];else if(isMark(pair[1])&&!isMark(pair[0]))spans=[8,4];else if(pair[0].width/pair[0].height<.85&&pair[1].width/pair[1].height>=1.2)spans=[4,8];else if(isMark(pair[0])&&!isMark(pair[1]))spans=[4,8];
+      html+='<div class="document-spread">'+pair.map((d,j)=>figure(f,d,'span-'+spans[j])).join('')+'</div>';
+    }return html+'</div>';
+  }
+  const jumpLinks = f => '<nav class="section-links" aria-label="In questa scheda"><a href="#format/'+f.id+'/identita">Documenti visivi</a><a href="#format/'+f.id+'/informazioni">Informazioni del formato</a>'+(f.cases.length?'<a href="#format/'+f.id+'/edizioni">Edizioni e casi studio</a>':'')+'</nav>';
+
   function navigate(route) { if (route === location.hash.slice(1)) return; location.hash = route; }
   function closeWelcome() { welcome.close(); try { localStorage.setItem('dte-intro','seen'); } catch {} map.focus({preventScroll:true}); }
   $('#start').onclick=closeWelcome;
@@ -85,13 +104,20 @@ function start({ formats, cases, research }) {
   $('#reset').onclick=()=>{zoom(1);grid.reset();map.classList.remove('explored');};
   map.addEventListener('wheel',()=>map.classList.add('explored'),{passive:true});map.addEventListener('pointermove',()=>{if(grid.pointer?.dragged)map.classList.add('explored');});map.addEventListener('keydown',e=>{if(e.key.startsWith('Arrow'))map.classList.add('explored');});
   function formatHTML(f) {
-    const primary=f.primary, related=f.cases.map(id=>caseById.get(id));
-    let html='<div class="reader-heading"><h1 id="reader-title">'+escape(f.name)+'</h1><p class="eyebrow">'+escape(f.category)+'</p><p class="reader-deck">'+escape(f.recurrence)+' · '+escape(f.dimension)+' · Variabilità '+escape(f.variabilityGroup)+'</p></div><div class="format-introduction"><button class="format-cover document-image" data-image="'+primary.id+'" data-format="'+f.id+'" aria-label="Ingrandisci immagine principale"><img src="'+primary.src+'" alt="'+escape(primary.caption)+'" width="'+primary.width+'" height="'+primary.height+'"></button><div><p class="lead">'+escape(f.summary)+'</p><p class="eyebrow">'+(primary.permanent?'Marchio del formato':escape(primary.label)+' / '+(primary.year||'s.d.'))+'</p><nav class="section-links" aria-label="In questa scheda"><a href="#format/'+f.id+'/informazioni">Informazioni ↓</a><a href="#format/'+f.id+'/identita">Identità visive ↓</a>'+(related.length?'<a href="#format/'+f.id+'/edizioni">Edizioni e casi studio ↓</a>':'')+'</nav></div></div>';
-    html+='<section id="informazioni"><div class="section-heading"><h2>Continuità e variabilità</h2></div>'+fields([['Titolare',f.owner],['Produttore dell’edizione',f.producer],['Prima edizione / fondazione',f.firstEdition],['Ricorrenza',f.recurrence],['Arco storico osservato',f.period],['Edizioni censite',f.editionCount],[f.informationSource==='tesi'?'Durata dell’edizione':'Durata media (giorni)',f.duration],['Sede',f.location],['Dimensione',f.dimension],['Variabilità esercitata',f.variability],['Periodo e fase della variabilità',f.variabilityPeriod],['Segni permanenti',f.permanentSigns]])+'</section>';
-    html+='<section id="identita"><div class="section-heading"><h2>Le identità, nel tempo</h2><p>Marchi e applicazioni raccolti, ordinati per anno. Seleziona un’immagine per leggere didascalia e fonte.</p></div>';
+    const primary=f.primary,related=f.cases.map(id=>caseById.get(id)),hero=feature(f.images);
+    let html='<header class="reader-heading"><h1 id="reader-title">'+escape(f.name)+'</h1><div class="reader-metadata"><span>'+escape(f.category)+'</span><span>'+escape(f.recurrence)+' · '+escape(f.dimension)+'</span><span>Variabilità '+escape(f.variabilityGroup)+'</span></div>'+jumpLinks(f)+'</header><div class="format-introduction editorial-opening" id="documento-apertura"><div class="opening-visual">'+figure(f,hero,'document-lead')+'</div><div class="opening-copy">'+(primary.id!==hero.id?'<div class="identity-anchor">'+figure(f,primary)+'</div>':'')+'<p class="lead">'+escape(f.summary)+'</p></div></div>';
+    html+='<details class="format-information" id="informazioni"><summary>Informazioni del formato</summary>'+fields([['Titolare',f.owner],['Produttore dell’edizione',f.producer],['Prima edizione / fondazione',f.firstEdition],['Ricorrenza',f.recurrence],['Arco storico osservato',f.period],['Edizioni censite',f.editionCount],[f.informationSource==='tesi'?'Durata dell’edizione':'Durata media (giorni)',f.duration],['Sede',f.location],['Dimensione',f.dimension],['Variabilità esercitata',f.variability],['Periodo e fase della variabilità',f.variabilityPeriod],['Segni permanenti',f.permanentSigns]])+'</details>';
+    html+='<section id="identita"><div class="section-heading"><h2>Le identità, nel tempo</h2><p>Marchi e applicazioni per anno. Ogni documento si può ingrandire e rimanda alla propria fonte.</p></div>';
     const groups=new Map();for(const d of f.images){const k=d.permanent?'permanente':d.year?String(d.year):'senza-data';if(!groups.has(k))groups.set(k,[]);groups.get(k).push(d);}
     const keys=[...groups.keys()].sort((a,b)=>a==='permanente'?-1:b==='permanente'?1:a==='senza-data'?1:b==='senza-data'?-1:Number(a)-Number(b));
-    for(const k of keys)html+='<div class="year-group"><h3>'+({permanente:'Segni permanenti','senza-data':'Anno non documentato'}[k]||k)+'</h3><div class="document-grid">'+groups.get(k).map(d=>figure(f,d)).join('')+'</div></div>';
+    for(const k of keys) {
+      const docs=groups.get(k),shown=docs.filter(d=>d.id!==hero.id&&!(primary.id!==hero.id&&d.id===primary.id));
+      const opening=docs.filter(d=>d.id===hero.id||primary.id!==hero.id&&d.id===primary.id);
+      const label=({permanente:'Segni permanenti','senza-data':'Anno non documentato'}[k]||k);
+      const reference=opening.length?'<a class="opening-reference" href="#format/'+f.id+'/documento-apertura">In apertura: '+opening.map(d=>escape(d.label.toLowerCase())).join(', ')+' ↑</a>':'';
+      if(!shown.length) { html+='<div class="opening-record"><span>'+label+'</span>'+reference+'</div>';continue; }
+      html+='<div class="year-group"><div class="year-heading"><h3>'+label+'</h3>'+reference+'</div>'+gallery(f,shown)+'</div>';
+    }
     html+='</section>';
     if(related.length) {
       html+='<section id="edizioni"><div class="section-heading"><h2>Le edizioni del formato</h2><p>Serie censita nel capitolo '+escape(f.thesisChapter)+' della tesi. I marchi disponibili accompagnano le edizioni; le assenze sono dichiarate. Solo le edizioni selezionate aprono un approfondimento.</p></div><div class="case-links">'+related.map(c=>'<a class="case-link" href="#edition/'+c.id+'"><span class="eyebrow">Caso studio / '+c.year+'</span><strong>'+escape(c.title)+'</strong><span aria-hidden="true">'+forwardIcon+'</span></a>').join('')+'</div><div class="edition-series">';
@@ -101,15 +127,23 @@ function start({ formats, cases, research }) {
     return html+'<section class="sources-section"><div class="section-heading"><h2>Verificare, continuare</h2></div><p>Stato nel foglio di ricerca: '+escape(f.status)+'. '+escape(f.reason)+'</p><p>'+escape(f.limitations||'Nessuna lacuna specifica annotata nel foglio.')+'</p><ul>'+f.sources.map(s=>'<li>'+sourceLink(s.url,s.title)+'</li>').join('')+(f.thesisChapter?'<li>'+sourceLink(research.thesis,'Tesi / capitolo '+f.thesisChapter)+'</li>':'')+'</ul><p class="source-note">Le immagini conservano la provenienza registrata nella raccolta. Quando l’autore non è identificato, consulta la fonte originale.</p></section>';
   }
   function caseHTML(c) {
-    const f=formatById.get(c.formatId),imgs=c.images.map(id=>f.images.find(d=>d.id===id)),parts=c.lifecycle.filter(Boolean),n=parts.length;
-    return '<div class="reader-heading"><h1 id="reader-title">'+escape(c.title)+'</h1><p class="eyebrow">'+escape(f.name)+'</p><p class="reader-deck">'+escape(c.fields['Sede e date'])+'</p><p class="eyebrow">Analisi al momento della stesura della tesi</p></div>'+(imgs.length?'<div class="case-hero">'+figure(f,imgs[0])+'</div>':'')+'<details class="case-information"><summary>Informazioni dell’edizione e autori del progetto</summary>'+fields(Object.entries(c.fields).filter(([k])=>k!=='Formato'))+'</details><section><div class="section-heading"><h2>Un’identità per questa edizione</h2></div><div class="reading-column">'+p(c.description)+'</div></section><section><div class="section-heading"><h2>Marchi e applicazioni</h2></div>'+(imgs.length?'<div class="document-grid">'+imgs.map(d=>figure(f,d)).join('')+'</div>':'<p class="document-gap">I materiali visivi di questa edizione non sono ancora presenti nelle cartelle fornite. Il caso resta consultabile attraverso l’analisi e le fonti.</p>')+'</section><section><div class="section-heading"><h2>Ciò che attraversa la serie</h2></div><div class="reading-column"><p>'+escape(f.permanentSigns)+'.</p><p>Variabilità del formato: '+escape(f.variability)+'. Periodo osservato: '+escape(f.variabilityPeriod||f.period)+'.</p><a href="#format/'+f.id+'">Confronta le altre edizioni di '+escape(f.name)+' ↗</a></div></section><section><div class="section-heading"><h2>Prima, durante, dopo</h2><p>Le fasi descrivono il ciclo del progetto. Le date sotto sono quelle documentate nella tesi.</p></div><div class="lifecycle"><section><span class="phase-number">01</span><h3>Presentazione</h3>'+p(parts.slice(0,Math.max(1,n-2)))+'</section><section><span class="phase-number">02</span><h3>Evento</h3>'+p(n>=3?[parts[n-2]]:[])+'</section><section><span class="phase-number">03</span><h3>Post-evento</h3>'+p(n>=2?[parts[n-1]]:[])+'</section></div><details class="dates" open><summary>Date e passaggi del progetto</summary><ol>'+c.dates.map(t=>'<li>'+escape(t)+'</li>').join('')+'</ol></details></section><section class="sources-section"><h2>Fonti dell’approfondimento</h2><p>'+escape(c.sourceNote)+'</p>'+sourceLink(c.source,'Tesi / capitolo '+c.chapter)+'<ul>'+f.sources.map(s=>'<li>'+sourceLink(s.url,s.title)+'</li>').join('')+'</ul><a class="return-format" href="#format/'+f.id+'">← Torna alla scheda del formato</a></section>';
+    const f=formatById.get(c.formatId),imgs=c.images.map(id=>f.images.find(d=>d.id===id)),hero=feature(imgs),remaining=imgs.filter(d=>d.id!==hero?.id),mark=remaining.find(isMark),rest=remaining.filter(d=>d.id!==mark?.id),parts=c.lifecycle.filter(Boolean),n=parts.length;
+    const split=Math.ceil(rest.length/2),early=rest.slice(0,split),late=rest.slice(split);
+    let html='<header class="reader-heading"><h1 id="reader-title">'+escape(c.title)+'</h1><div class="reader-metadata"><span>'+escape(f.name)+'</span><span>'+escape(c.fields['Sede e date'])+'</span></div><p class="thesis-time">Analisi al momento della stesura della tesi</p></header>';
+    if(hero)html+='<div class="case-hero document-grid">'+figure(f,hero,'document-lead')+'</div>';
+    html+='<section class="case-context"><div class="section-heading"><h2>Un’identità per questa edizione</h2></div><div class="case-story"><div class="reading-column">'+p(c.description)+'</div>'+(mark?'<aside class="case-mark document-grid">'+figure(f,mark)+'</aside>':'')+'</div><details class="case-information"><summary>Edizione e autori del progetto</summary>'+fields(Object.entries(c.fields).filter(([k])=>k!=='Formato'))+'</details></section>';
+    if(early.length)html+='<section class="case-materials"><div class="section-heading"><h2>Il sistema visivo</h2></div>'+gallery(f,early)+'</section>';
+    if(!imgs.length)html+='<p class="document-gap">I materiali visivi di questa edizione non sono ancora presenti nelle cartelle fornite. Il caso resta consultabile attraverso l’analisi e le fonti.</p>';
+    html+='<section class="format-relationship"><div class="section-heading"><h2>Ciò che attraversa la serie</h2></div><div class="reading-column"><p>'+escape(f.permanentSigns)+'.</p><p>Variabilità del formato: '+escape(f.variability)+'. '+escape(f.variabilityPeriod||f.period)+'</p><a href="#format/'+f.id+'">Confronta le altre edizioni di '+escape(f.name)+' ↗</a></div></section>';
+    if(late.length)html+='<section class="case-materials">'+gallery(f,late)+'</section>';
+    return html+'<section><div class="section-heading"><h2>Prima, durante, dopo</h2><p>Le fasi descrivono il ciclo del progetto. Le date sotto sono quelle documentate nella tesi.</p></div><div class="lifecycle"><section><span class="phase-number">01</span><h3>Presentazione</h3>'+p(parts.slice(0,Math.max(1,n-2)))+'</section><section><span class="phase-number">02</span><h3>Evento</h3>'+p(n>=3?[parts[n-2]]:[])+'</section><section><span class="phase-number">03</span><h3>Post-evento</h3>'+p(n>=2?[parts[n-1]]:[])+'</section></div><details class="dates" open><summary>Date e passaggi del progetto</summary><ol>'+c.dates.map(t=>'<li>'+escape(t)+'</li>').join('')+'</ol></details></section><section class="sources-section"><h2>Fonti dell’approfondimento</h2><p>'+escape(c.sourceNote)+'</p>'+sourceLink(c.source,'Tesi / capitolo '+c.chapter)+'<ul>'+f.sources.map(s=>'<li>'+sourceLink(s.url,s.title)+'</li>').join('')+'</ul><a class="return-format" href="#format/'+f.id+'">← Torna alla scheda del formato</a></section>';
   }
   function researchHTML() {
     const glossary=research.glossary.map(g=>'<div><dt>'+escape(g.term)+'</dt><dd>'+escape(g.definition)+'</dd></div>').join('');
     return '<div class="reader-heading"><h1 id="reader-title">'+escape(research.title)+'</h1><p class="reader-deck">Una ricerca di '+escape(research.author)+'</p></div><div class="reading-column"><p class="research-question">'+escape(research.question)+'</p>'+p(research.introduction)+'<section><h2>Metodo</h2>'+p(research.method)+'</section><section><h2>Criteri di selezione</h2>'+p(research.selection)+'</section><section><h2>Glossario</h2><dl class="glossary">'+glossary+'</dl></section><section><h2>Gradi di variabilità</h2><dl class="glossary">'+research.variability.map(g=>'<div><dt>'+escape(g.term)+'</dt><dd>'+escape(g.definition)+'</dd></div>').join('')+'</dl><p>Il grado va letto insieme al periodo e alla fase dichiarati nella scheda. Le categorie non sostituiscono il confronto tra le immagini.</p></section><section><h2>Bibliografia e fonti</h2><details><summary>Riferimenti bibliografici della tesi</summary><ul class="bibliography">'+research.bibliography.map(t=>'<li>'+escape(t)+'</li>').join('')+'</ul></details><details><summary>Repertori e fonti documentarie</summary><ul class="bibliography">'+research.repertories.map(t=>'<li>'+escape(t)+'</li>').join('')+'</ul></details>'+sourceLink(research.thesis,'Consulta la tesi completa')+'</section><section><h2>Crediti e documentazione</h2><p>Ricerca e testi: Nicolò Armelin. Marchi, immagini e progetti appartengono ai rispettivi autori e titolari; la provenienza è indicata su ogni documento. L’archivio rende esplicite le lacune della raccolta.</p><p>Carattere graziato: '+sourceLink('https://github.com/google/fonts/tree/main/ofl/instrumentserif','Instrument Serif / SIL Open Font License')+'.</p><button class="primary" data-archive>Esplora il catalogo ↗</button></section></div>';
   }
   $('#reader-content').addEventListener('click',e=>{
-    const b=e.target.closest('[data-image]');if(b){parentRoute=location.hash.slice(1).split('/').slice(0,2).join('/');imageGroup=[...b.closest('.document-grid, .edition-series, .format-introduction, .case-hero').querySelectorAll('[data-image]')].map(el=>el.dataset.image);navigate('image/'+b.dataset.format+'/'+b.dataset.image);}
+    const b=e.target.closest('[data-image]');if(b){parentRoute=location.hash.slice(1).split('/').slice(0,2).join('/');imageGroup=[...b.closest('.document-grid, .edition-series, .format-introduction, .case-hero, .identity-anchor').querySelectorAll('[data-image]')].map(el=>el.dataset.image);navigate('image/'+b.dataset.format+'/'+b.dataset.image);}
     if(e.target.closest('[data-archive]'))navigate(view==='index'?'index':'');
   });
   const closeReader=()=>navigate(view==='index'?'index':'');
@@ -118,6 +152,7 @@ function start({ formats, cases, research }) {
   reader.addEventListener('cancel',e=>{e.preventDefault();closeReader();});
   function renderImage(f,d) {
     if(!imageGroup.includes(d.id))imageGroup=f.images.map(i=>i.id);imageIndex=imageGroup.indexOf(d.id);
+    viewer.classList.toggle('is-landscape',d.width/d.height>1.2);
     $('#viewer-image').src=d.src;$('#viewer-image').alt=d.caption;$('#viewer-image').hidden=false;$('#image-error').hidden=true;
     $('#image-title').textContent=d.label;$('#image-context').textContent=f.name+' / '+(d.permanent?'Segno permanente':d.year||'Anno non documentato');
     $('#image-caption').textContent=d.caption;$('#image-credit').textContent=d.credit+(d.quality?' '+d.quality+'.':'');
@@ -155,7 +190,8 @@ function start({ formats, cases, research }) {
     $('#reader-content').innerHTML=html;$('#reader-back').innerHTML=backIcon+escape(back.replace(/^← /,''));$('#reader-position').textContent=position;$('#reader-research').hidden=kind==='research';
     if(!reader.open)reader.showModal();
     const scroll=$('#reader-scroll'),section=extra&&$('#reader-content').querySelector('#'+CSS.escape(extra));
-    scroll.scrollTop=section?section.offsetTop-12:(routeScroll.get(kind+'/'+id)||0);
+    if(section instanceof HTMLDetailsElement)section.open=true;
+    scroll.scrollTop=section?section.getBoundingClientRect().top-scroll.getBoundingClientRect().top+scroll.scrollTop-28:(routeScroll.get(kind+'/'+id)||0);
     if(!lastRoute.startsWith('image/'))$('#reader-back').focus({preventScroll:true});
     lastRoute=route;
   }

@@ -1,4 +1,4 @@
-// No large scrolling element: only cells near the viewport exist in the DOM.
+// One spatial position per format; only nearby documents enter the DOM.
 export class InfiniteGrid {
   constructor(viewport, layer, items, onSelect) {
     if (!items.length) throw new Error('The grid needs at least one item.');
@@ -45,6 +45,10 @@ export class InfiniteGrid {
     this.cardHeight = (this.width < 640 ? 215 : 275) * this.zoom;
     this.stepX = this.cardWidth + (this.width < 640 ? 36 : 70) * this.zoom;
     this.stepY = this.cardHeight + (this.width < 640 ? 32 : 58) * this.zoom;
+    this.columns = Math.max(1,Math.ceil(Math.sqrt(this.items.length)));
+    this.rows = Math.max(1,Math.ceil(this.items.length/this.columns));
+    this.periodX = Math.max(this.columns*this.stepX+this.stepX/2,this.width+this.stepX*2);
+    this.periodY = Math.max(this.rows*this.stepY,this.height+this.stepY*2);
     this.render();
   }
 
@@ -52,54 +56,46 @@ export class InfiniteGrid {
     if (!this.items.length) return;
     const mod = (n, m) => ((n % m) + m) % m;
     const needed = new Set();
-    const firstRow = Math.floor(-this.y / this.stepY) - 1;
-    const lastRow = Math.ceil((this.height - this.y) / this.stepY);
-    for (let row = firstRow; row <= lastRow; row++) {
-      const stagger = mod(row, 2) * this.stepX / 2;
-      const firstCol = Math.floor((-this.x - stagger) / this.stepX) - 1;
-      const lastCol = Math.ceil((this.width - this.x - stagger) / this.stepX);
-      for (let col = firstCol; col <= lastCol; col++) {
-        const key = `${row}:${col}`;
-        needed.add(key);
-        let cell = this.cells.get(key);
-        if (!cell) {
-          // Six columns × an even number of rows repeats seamlessly, including negatives.
-          const periodRows = Math.ceil(this.items.length / 12) * 2;
-          const index = mod(mod(row, periodRows) * 6 + mod(col, 6), this.items.length);
-          const item = this.items[index];
-          cell = document.createElement('button');
-          cell.type = 'button';
-          cell.tabIndex = -1;
-          cell.className = 'tile';
-          cell.dataset.index = index;
-          cell.dataset.kind = item.kind || 'Marchio';
-          cell.style.setProperty('--image-background', item.background || '#f5f3ef');
-          cell.setAttribute('aria-label', `Apri la scheda del formato ${item.title}`);
-          const img = document.createElement('img');
-          img.src = item.thumb || item.src;
-          img.alt = item.title;
-          img.draggable = false;
-          img.decoding = 'async';
-          img.loading = 'lazy';
-          img.width = item.width || 1;
-          img.height = item.height || 1;
-          const caption = document.createElement('span');
-          caption.className = 'caption';
-          const title = document.createElement('span');
-          title.textContent = item.title;
-          const meta = document.createElement('span');
-          meta.className = 'tile-meta';
-          const identifier = document.createElement('span');
-          identifier.className = 'tile-id';
-          identifier.textContent = String(item.archiveNumber || index + 1).padStart(3, '0');
-          meta.textContent = item.category;
-          caption.append(identifier, title, meta);
-          cell.append(img, caption);
-          this.layer.append(cell);
-          this.cells.set(key, cell);
-        }
-        const left = col * this.stepX + stagger + this.x;
-        const top = row * this.stepY + this.y;
+    for(let index=0;index<this.items.length;index++) {
+      const row=Math.floor(index/this.columns),col=index%this.columns;
+      const baseX=col*this.stepX+(row%2)*this.stepX/2+this.x,baseY=row*this.stepY+this.y;
+      const left=mod(baseX-this.width/2+this.periodX/2,this.periodX)+this.width/2-this.periodX/2;
+      const top=mod(baseY-this.height/2+this.periodY/2,this.periodY)+this.height/2-this.periodY/2;
+      if(left>this.width+this.cardWidth||left+this.cardWidth < -this.cardWidth||top>this.height+this.cardHeight||top+this.cardHeight < -this.cardHeight)continue;
+      const key=String(index);needed.add(key);let cell=this.cells.get(key);
+      if(!cell){
+      const item = this.items[index];
+      cell = document.createElement('button');
+      cell.type = 'button';
+      cell.tabIndex = -1;
+      cell.className = 'tile';
+      cell.dataset.index = index;
+      cell.dataset.kind = item.kind || 'Marchio';
+      cell.style.setProperty('--image-background', item.background || '#f5f3ef');
+      cell.setAttribute('aria-label', `Apri la scheda del formato ${item.title}`);
+      const img = document.createElement('img');
+      img.src = item.thumb || item.src;
+      img.alt = item.title;
+      img.draggable = false;
+      img.decoding = 'async';
+      img.loading = 'lazy';
+      img.width = item.width || 1;
+      img.height = item.height || 1;
+      const caption = document.createElement('span');
+      caption.className = 'caption';
+      const title = document.createElement('span');
+      title.textContent = item.title;
+      const meta = document.createElement('span');
+      meta.className = 'tile-meta';
+      const identifier = document.createElement('span');
+      identifier.className = 'tile-id';
+      identifier.textContent = String(item.archiveNumber || index + 1).padStart(3, '0');
+      meta.textContent = item.category;
+      caption.append(identifier, title, meta);
+      cell.append(img, caption);
+      this.layer.append(cell);
+      this.cells.set(key, cell);
+    }
         if (cell.layoutVersion !== this.layoutVersion) {
           const item = this.items[Number(cell.dataset.index)];
           const factor = [1, .82, .94, .78, .9][Number(cell.dataset.index) % 5];
@@ -125,7 +121,6 @@ export class InfiniteGrid {
         if (cell.tabIndex !== tabIndex) cell.tabIndex = tabIndex;
         const hidden = String(left + this.cardWidth < 0 || left > this.width || top + this.cardHeight < 0 || top > this.height);
         if (cell.getAttribute('aria-hidden') !== hidden) cell.setAttribute('aria-hidden', hidden);
-      }
     }
     for (const [key, cell] of this.cells) {
       if (!needed.has(key)) {
@@ -156,7 +151,7 @@ export class InfiniteGrid {
     this.x += (this.targetX - this.x) * blend;
     this.y += (this.targetY - this.y) * blend;
     // Keep coordinates numerically stable after very long navigation.
-    const periods = [this.stepX * 6, this.stepY * Math.ceil(this.items.length / 12) * 2];
+    const periods = [this.periodX, this.periodY];
     for (const [position, target, period] of [['x', 'targetX', periods[0]], ['y', 'targetY', periods[1]]]) {
       if (Math.abs(this[position]) > 1000000) {
         const shift = Math.trunc(this[position] / period) * period;
@@ -257,8 +252,8 @@ export class InfiniteGrid {
 
   reset() {
     this.vx = this.vy = 0;
-    this.x = this.targetX = -this.stepX / 2;
-    this.y = this.targetY = 16;
+    this.x = this.targetX = this.items.length<=6?(this.width-(this.columns-1)*this.stepX-this.cardWidth)/2:-this.stepX/2;
+    this.y = this.targetY = this.items.length<=6?(this.height-(this.rows-1)*this.stepY-this.cardHeight)/2:16;
     this.render();
   }
 
@@ -279,6 +274,7 @@ export class InfiniteGrid {
     this.items = items;
     this.layer.replaceChildren();
     this.cells.clear();
+    this.resize();
     this.reset();
   }
 

@@ -1,5 +1,6 @@
 .DS_Store
 assets/fonts/*Trial*
+assets/fonts/*TRIAL*
 assets/fonts/*.otf
 .impeccable/
 PRODUCT.md
@@ -7,3 +8,5 @@ DESIGN.md
 assets/**/*.webp.json
 .env
 .env.*
+
+preview-fonts.css
