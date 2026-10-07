@@ -1,10 +1,9 @@
-if (['localhost','127.0.0.1'].includes(location.hostname) && !new URLSearchParams(location.search).has('public-preview')) { const fontSheet=document.createElement('link');fontSheet.rel='stylesheet';fontSheet.href='./preview-fonts.css';document.head.append(fontSheet); }
-import { InfiniteGrid } from './infinite-grid.js?v=20261006-editorial-1';
-import { filterFormats } from './catalogue.js?v=20261006-editorial-1';
+import { ArchiveGrid } from './infinite-grid.js?v=20261007-navigation-6';
+import { filterFormats } from './catalogue.js?v=20261007-navigation-6';
 const $ = s => document.querySelector(s);
 const backIcon = '<svg class="icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5m6-6-6 6 6 6"/></svg>';
 const forwardIcon = '<svg class="icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 19 19 5M5 5h14v14"/></svg>';
-const data = await fetch(new URL('./archive-data.json?v=20261006-editorial-1', import.meta.url)).then(r => { if (!r.ok) throw new Error('Catalogo non disponibile'); return r.json(); }).catch(() => null);
+const data = await fetch(new URL('./archive-data.json?v=20261007-navigation-6', import.meta.url)).then(r => { if (!r.ok) throw new Error('Catalogo non disponibile'); return r.json(); }).catch(() => null);
 if (!data) { $('#empty').hidden = false; $('#empty h1').textContent = 'Archivio non disponibile'; $('#empty p:not(.eyebrow)').textContent = 'Ricarica la pagina per riprovare.'; $('#empty-reset').textContent = 'Ricarica'; $('#empty-reset').onclick = () => location.reload(); }
 else start(data);
 function start({ formats, cases, research }) {
@@ -16,7 +15,7 @@ function start({ formats, cases, research }) {
   let researchOrigin = '';
   let results = formats, view = 'map', searchTimer, trigger, lastRoute = '', parentRoute = '', imageGroup = [], imageIndex = 0;
   const routeScroll = new Map(), gridItems = fs => fs.map(f => ({ ...f, src: f.primary.src, thumb: f.primary.thumb, width:f.primary.width, height:f.primary.height, kind:f.primary.permanent?'Marchio':'Applicazione', background:'transparent' }));
-  const grid = new InfiniteGrid(map, $('#tiles'), gridItems(formats), (f, el) => { trigger=el; navigate('format/'+f.id); });
+  const grid = new ArchiveGrid(map, $('#tiles'), gridItems(formats), (f, el) => { trigger=el; navigate('format/'+f.id); });
   const escape = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const p = texts => texts.map(t => '<p>'+escape(t)+'</p>').join('');
   const sourceLink = (url,title) => /^https?:\/\//.test(url || '') ? '<a target="_blank" rel="noopener noreferrer" href="'+escape(url)+'">'+escape(title)+' ↗</a>' : '<span>'+escape(title)+'</span>';
@@ -29,7 +28,7 @@ function start({ formats, cases, research }) {
   const figure = (f,d,extra='') => {
     const mark=isMark(d),ratio=d.width/d.height;
     const srcset=d.width>480?' srcset="'+d.thumb+' 480w, '+d.src+' '+d.width+'w" sizes="(max-width: 640px) calc(100vw - 56px), (max-width: 960px) 70vw, 900px"':'';
-    return '<figure class="document-figure '+(mark?'document-mark':ratio<.85?'document-portrait':'document-application')+' '+extra+'"><button class="document-image" data-image="'+escape(d.id)+'" data-format="'+f.id+'" aria-label="Ingrandisci '+escape(d.label)+' di '+escape(f.name)+'"><img src="'+d.src+'"'+srcset+' alt="'+escape(d.caption)+'" width="'+d.width+'" height="'+d.height+'" loading="lazy" decoding="async"></button><figcaption><div class="document-meta"><span>'+escape(d.label)+' / '+(d.permanent?'Segno permanente':d.year||'s.d.')+'</span>'+sourceLink(d.source,'Fonte')+'</div><p>'+escape(d.caption)+'</p></figcaption></figure>';
+    return '<figure class="document-figure '+(mark?'document-mark':ratio<.85?'document-portrait':'document-application')+' '+extra+'"><button class="document-image" data-image="'+escape(d.id)+'" data-format="'+f.id+'" aria-label="Ingrandisci '+escape(d.label)+' di '+escape(f.name)+'"><img src="'+d.src+'"'+srcset+' alt="'+escape(d.caption)+'" width="'+d.width+'" height="'+d.height+'" loading="lazy" decoding="async"></button></figure>';
   };
   function gallery(f,docs) {
     if(!docs.length)return '';
@@ -43,7 +42,11 @@ function start({ formats, cases, research }) {
   function navigate(route) { if (route === location.hash.slice(1)) return; location.hash = route; }
   function closeWelcome() { welcome.close(); try { localStorage.setItem('dte-intro','seen'); } catch {} map.focus({preventScroll:true}); }
   $('#start').onclick=closeWelcome;
-  $('#about').onclick=$('#help').onclick=()=>{grid.stop();welcome.showModal();};
+  $('#about').onclick=()=>{grid.stop();welcome.showModal();};
+  function toggleSearch(open) { $('#search-panel').hidden=!open;$('#search-toggle').setAttribute('aria-expanded',String(open));document.body.classList.toggle('search-open',open);if(open){grid.stop();$('#search').focus();}else $('#search-toggle').focus(); }
+  $('#search-toggle').onclick=()=>toggleSearch($('#search-panel').hidden);
+  $('#close-search').onclick=()=>toggleSearch(false);
+  $('#search-panel').addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();toggleSearch(false);}});
   $('#welcome-research').onclick=()=>{closeWelcome();navigate('research');};
   $('#research').onclick=$('#reader-research').onclick=()=>navigate('research');
   const isArchiveRoute = r => !r || r==='index';
@@ -68,12 +71,13 @@ function start({ formats, cases, research }) {
   function applyFilters() {
     clearTimeout(searchTimer); results=filterFormats(formats,state); grid.setItems(gridItems(results)); indexRows();
     $('#empty').hidden=results.length>0;
-    $('#result-count').textContent=results.length+' '+(results.length===1?'formato':'formati')+' / '+results.reduce((n,f)=>n+f.images.length,0)+' documenti';
+    $('#result-count').innerHTML='<span>'+results.length+' '+(results.length===1?'formato':'formati')+'</span><span>'+results.reduce((n,f)=>n+f.images.length,0)+' documenti</span>';
     $('#filters-status').textContent=results.length?results.length+' formati in entrambe le viste.':'Nessun formato. Prova a rimuovere un filtro.';
     $('#show-results').textContent=results.length?'Mostra '+results.length+' formati':'Torna al catalogo';
     $('#clear-search').hidden=!state.query;
     const chips=$('#active-filters');chips.replaceChildren();
     const add=(label,remove)=>{const b=document.createElement('button');b.textContent=label+' ×';b.setAttribute('aria-label','Rimuovi filtro '+label);b.onclick=()=>{remove();applyFilters();$('#open-filters').focus();};chips.append(b);};
+    if(state.query)add('Ricerca: '+state.query,()=>{state.query='';$('#search').value='';});
     for(const c of state.categories)add(c,()=>state.categories.delete(c));
     for(const k of ['recurrence','dimension','variability'])if(state[k])add(state[k],()=>state[k]='');
     if(state.caseOnly)add('Con caso studio',()=>state.caseOnly=false);
@@ -99,8 +103,10 @@ function start({ formats, cases, research }) {
   $('#search').oninput=()=>{state.query=$('#search').value;clearTimeout(searchTimer);searchTimer=setTimeout(applyFilters,100);};
   $('#clear-search').onclick=()=>{state.query='';$('#search').value='';applyFilters();$('#search').focus();};
   $('#open-filters').onclick=()=>{grid.stop();filters.showModal();};$('#close-filters').onclick=$('#show-results').onclick=()=>filters.close();
-  function zoom(v) {const z=grid.setZoom(v);$('#zoom-value').textContent=Math.round(z*100)+'%';$('#zoom-out').disabled=z<=.65;$('#zoom-in').disabled=z>=1.4;}
-  $('#zoom-in').onclick=()=>{zoom(grid.zoom+.15);map.classList.add('explored');};$('#zoom-out').onclick=()=>{zoom(grid.zoom-.15);map.classList.add('explored');};
+  function updateZoom() { const z=grid.zoom;$('#zoom-value').textContent=Math.round(z*100)+'%';$('#zoom-out').disabled=z<=grid.minZoom+.00001;$('#zoom-in').disabled=z>=2; }
+  function zoom(v) {grid.setZoom(v);updateZoom();}
+  map.addEventListener('gridzoom',updateZoom);updateZoom();
+  $('#zoom-in').onclick=()=>{zoom(grid.zoom*1.2);map.classList.add('explored');};$('#zoom-out').onclick=()=>{zoom(grid.zoom/1.2);map.classList.add('explored');};
   $('#reset').onclick=()=>{zoom(1);grid.reset();map.classList.remove('explored');};
   map.addEventListener('wheel',()=>map.classList.add('explored'),{passive:true});map.addEventListener('pointermove',()=>{if(grid.pointer?.dragged)map.classList.add('explored');});map.addEventListener('keydown',e=>{if(e.key.startsWith('Arrow'))map.classList.add('explored');});
   function formatHTML(f) {
@@ -140,7 +146,7 @@ function start({ formats, cases, research }) {
   }
   function researchHTML() {
     const glossary=research.glossary.map(g=>'<div><dt>'+escape(g.term)+'</dt><dd>'+escape(g.definition)+'</dd></div>').join('');
-    return '<div class="reader-heading"><h1 id="reader-title">'+escape(research.title)+'</h1><p class="reader-deck">Una ricerca di '+escape(research.author)+'</p></div><div class="reading-column"><p class="research-question">'+escape(research.question)+'</p>'+p(research.introduction)+'<section><h2>Metodo</h2>'+p(research.method)+'</section><section><h2>Criteri di selezione</h2>'+p(research.selection)+'</section><section><h2>Glossario</h2><dl class="glossary">'+glossary+'</dl></section><section><h2>Gradi di variabilità</h2><dl class="glossary">'+research.variability.map(g=>'<div><dt>'+escape(g.term)+'</dt><dd>'+escape(g.definition)+'</dd></div>').join('')+'</dl><p>Il grado va letto insieme al periodo e alla fase dichiarati nella scheda. Le categorie non sostituiscono il confronto tra le immagini.</p></section><section><h2>Bibliografia e fonti</h2><details><summary>Riferimenti bibliografici della tesi</summary><ul class="bibliography">'+research.bibliography.map(t=>'<li>'+escape(t)+'</li>').join('')+'</ul></details><details><summary>Repertori e fonti documentarie</summary><ul class="bibliography">'+research.repertories.map(t=>'<li>'+escape(t)+'</li>').join('')+'</ul></details>'+sourceLink(research.thesis,'Consulta la tesi completa')+'</section><section><h2>Crediti e documentazione</h2><p>Ricerca e testi: Nicolò Armelin. Marchi, immagini e progetti appartengono ai rispettivi autori e titolari; la provenienza è indicata su ogni documento. L’archivio rende esplicite le lacune della raccolta.</p><p>Carattere graziato: '+sourceLink('https://github.com/google/fonts/tree/main/ofl/instrumentserif','Instrument Serif / SIL Open Font License')+'.</p><button class="primary" data-archive>Esplora il catalogo ↗</button></section></div>';
+    return '<div class="reader-heading"><h1 id="reader-title">'+escape(research.title)+'</h1><p class="reader-deck">Una ricerca di '+escape(research.author)+'</p></div><div class="reading-column"><p class="research-question">'+escape(research.question)+'</p>'+p(research.introduction)+'<section><h2>Metodo</h2>'+p(research.method)+'</section><section><h2>Criteri di selezione</h2>'+p(research.selection)+'</section><section><h2>Glossario</h2><dl class="glossary">'+glossary+'</dl></section><section><h2>Gradi di variabilità</h2><dl class="glossary">'+research.variability.map(g=>'<div><dt>'+escape(g.term)+'</dt><dd>'+escape(g.definition)+'</dd></div>').join('')+'</dl><p>Il grado va letto insieme al periodo e alla fase dichiarati nella scheda. Le categorie non sostituiscono il confronto tra le immagini.</p></section><section><h2>Bibliografia e fonti</h2><details><summary>Riferimenti bibliografici della tesi</summary><ul class="bibliography">'+research.bibliography.map(t=>'<li>'+escape(t)+'</li>').join('')+'</ul></details><details><summary>Repertori e fonti documentarie</summary><ul class="bibliography">'+research.repertories.map(t=>'<li>'+escape(t)+'</li>').join('')+'</ul></details>'+sourceLink(research.thesis,'Consulta la tesi completa')+'</section><section><h2>Crediti e documentazione</h2><p>Ricerca e testi: Nicolò Armelin. Marchi, immagini e progetti appartengono ai rispettivi autori e titolari; la provenienza è indicata su ogni documento. L’archivio rende esplicite le lacune della raccolta.</p><p>Tipografia: '+sourceLink('https://www.boulevardtype.com/','Office Times / Boulevard LAB')+'. Mono per titoli e controlli, Regular per i testi.</p><button class="primary" data-archive>Esplora il catalogo ↗</button></section></div>';
   }
   $('#reader-content').addEventListener('click',e=>{
     const b=e.target.closest('[data-image]');if(b){parentRoute=location.hash.slice(1).split('/').slice(0,2).join('/');imageGroup=[...b.closest('.document-grid, .edition-series, .format-introduction, .case-hero, .identity-anchor').querySelectorAll('[data-image]')].map(el=>el.dataset.image);navigate('image/'+b.dataset.format+'/'+b.dataset.image);}
@@ -169,6 +175,7 @@ function start({ formats, cases, research }) {
   viewer.addEventListener('keydown',e=>{if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();stepImage(e.key==='ArrowRight'?1:-1);}});
   function renderRoute() {
     const route=decodeURIComponent(location.hash.slice(1)),[kind,id,extra]=route.split('/');
+    const readingResearch=kind==='research';$('#research').setAttribute('aria-pressed',String(readingResearch));$('#view-map').setAttribute('aria-pressed',String(!readingResearch&&view==='map'));$('#view-index').setAttribute('aria-pressed',String(!readingResearch&&view==='index'));
     if(reader.open && !lastRoute.startsWith('image/'))routeScroll.set(lastRoute.split('/').slice(0,2).join('/'),$('#reader-scroll').scrollTop);
     if(kind!=='image'&&viewer.open)viewer.close();
     if(isArchiveRoute(route)) {

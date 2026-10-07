@@ -10,3 +10,7 @@ assets/**/*.webp.json
 .env.*
 
 preview-fonts.css
+
+# Web embedding authorized by the user for these supplied Office Times files.
+!assets/fonts/BLOfficeTimesTRIAL-RegularMono.woff2
+!assets/fonts/BLOfficeTimesTRIAL-Regular.woff2

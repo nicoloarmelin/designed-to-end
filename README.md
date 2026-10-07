@@ -25,9 +25,9 @@ Fonti principali: [foglio dell’archivio](https://docs.google.com/spreadsheets/
 
 ## Tipografia
 
-Instrument Serif, distribuito con SIL Open Font License (`assets/fonts/OFL.txt`), per titoli e lettura; Courier New per i controlli. I caratteri ABC Gaisyr Trial del prototipo non sono inclusi nell’anteprima pubblica.
+Office Times di Boulevard LAB: Mono per titoli, menù e controlli; Regular per i testi. I due WOFF2 forniti dall’autore sono inclusi per il sito con licenza web o autorizzazione confermata. Instrument Serif (SIL Open Font License, `assets/fonts/OFL.txt`) rimane come ripiego.
 
-L’anteprima locale può caricare Office Times Trial tramite `preview-fonts.css`, escluso dal repository insieme ai file Trial. La distribuzione pubblica mantiene i font liberi finché non è disponibile un’autorizzazione web. Il parametro locale `?public-preview` permette di verificare la tipografia della versione pubblica.
+Il menù principale è una barra frost glass compatta: centrata in alto su desktop e in basso su telefono. Ricerca e filtri sono condivisi dal mosaico e dall’indice.
 
 ## Avvio locale e pubblicazione
 
@@ -38,3 +38,11 @@ python3 -m http.server 4173 --bind 127.0.0.1
 ```
 
 Apri http://127.0.0.1:4173/. GitHub Pages pubblica dal ramo `main`, cartella `/`.
+
+Lo zoom del mosaico risponde al gesto di pizzicare sul trackpad, a Ctrl/Cmd/Alt + rotella del mouse e ai pulsanti +/−. Lo scroll normale mantiene lo spostamento sui due assi; il limite inferiore si adatta allo schermo e ricentra tutti i formati in una panoramica completa, senza duplicazioni. Sono disponibili anche il gesto a due dita su schermo touch e i tasti +/− con la mappa a fuoco.
+
+Precisazione utente 7 ottobre 2026: il mosaico è una mappa FINITA, con coordinate fisse e un solo elemento per formato. Lo spostamento della camera si ferma ai bordi del catalogo, senza ricircolo o righe/colonne ripetute. Sono mantenuti trascinamento e scroll sui due assi, inerzia breve, zoom mouse/trackpad e panoramica di tutti i 100 formati.
+
+Precisazione grafica 7 ottobre 2026: mosaico masonry compatto, colonne di immagini ad altezze variabili con 16px fra elementi (alla scala 100%), senza testi sotto le immagini. Anche nelle gallerie delle schede non si mostrano didascalie o fonti su ciascuna foto: informazioni e provenienza restano nella consultazione ingrandita. L’indice mantiene i nomi adiacenti alle miniature, necessari per identificare i 100 formati.
+
+Ultima direzione confermata 7 ottobre 2026: la richiesta di meno rigidità riguarda la DISPOSIZIONE, non il movimento. Mosaico più spontaneo con più spazio bianco: immagini a dimensioni variabili, partenze e allineamenti sfalsati, distanze irregolari. Le coordinate restano deterministiche e fisse durante scroll/drag/zoom, senza ricircolo; nessuna etichetta sotto le immagini. Questa direzione supera la precedente uniformità delle colonne compatte da 220px/16px.
